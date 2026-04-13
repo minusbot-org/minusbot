@@ -3,11 +3,15 @@ import sys
 import os
 import urllib.request
 import urllib.parse
+from typing import Any, Optional
 
-def get_config(key, default=None):
+
+def get_config(key: str, default: Optional[Any] = None) -> Optional[str]:
+    """Get configuration from environment variables."""
     return os.environ.get(f"CONFIG_{key}", default)
 
-def run():
+
+def run() -> None:
     if len(sys.argv) < 2:
         print("Error: No inputs provided")
         return
@@ -25,18 +29,20 @@ def run():
 
     api_key = os.environ.get("API_KEY")
     if not api_key:
-        print("Error: API_KEY not found in environment. Please configure it in the vault.")
+        print(
+            "Error: API_KEY not found in environment. Please configure it in the vault."
+        )
         return
 
-    params = {
+    params: dict[str, Any] = {
         "engine": get_config("engine", "google"),
         "q": query,
         "api_key": api_key,
         "google_domain": get_config("google_domain", "google.com"),
         "gl": get_config("gl", "us"),
-        "hl": get_config("hl", "en")
+        "hl": get_config("hl", "en"),
     }
-    
+
     location = get_config("location")
     if location:
         params["location"] = location
@@ -46,7 +52,7 @@ def run():
     try:
         with urllib.request.urlopen(url) as response:
             data = json.loads(response.read().decode())
-            
+
             if "error" in data:
                 print(f"Search error: {data['error']}")
                 return
@@ -58,7 +64,7 @@ def run():
                     link = r.get("link", "#")
                     snippet = r.get("snippet", "")
                     results.append(f"[{title}]({link}): {snippet}")
-                
+
                 output = "\n\n".join(results)
                 print(output if output else "No results found.")
             else:
@@ -66,6 +72,7 @@ def run():
 
     except Exception as e:
         print(f"Error performing search: {str(e)}")
+
 
 if __name__ == "__main__":
     run()

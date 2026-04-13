@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import bcrypt from "bcryptjs";
+import { randomBytes } from "node:crypto";
 
 import { getConfigDir } from "./storage";
 import { Logger } from "../cli/colors";
@@ -46,8 +47,9 @@ export class UserManager {
             this.users = JSON.parse(content);
         } catch {
             // Create root user if it doesn't exist
-            const rootPass = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
-            const passwordHash = await bcrypt.hash(rootPass, 10);
+            const buffer = randomBytes(16);
+            const rootPass = buffer.toString('hex');
+            const passwordHash = await bcrypt.hash(rootPass, 12);
             this.users = [{
                 id: "root",
                 username: "root",

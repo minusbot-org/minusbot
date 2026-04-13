@@ -25,7 +25,6 @@ import time
 import urllib.parse
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from typing import Optional
 
 import requests
 
@@ -58,8 +57,8 @@ class LaunchError(DIALError):
 
 _SSDP_ADDR = "239.255.255.250"
 _SSDP_PORT = 1900
-_SSDP_MX   = 3
-_SSDP_ST   = "urn:dial-multiscreen-org:service:dial:1"
+_SSDP_MX = 3
+_SSDP_ST = "urn:dial-multiscreen-org:service:dial:1"
 
 _NS = {
     "dial": "urn:dial-multiscreen-org:schemas:dial",
@@ -113,7 +112,7 @@ class AppState:
     state: str
     """Running state: ``running``, ``stopped``, or ``installable``."""
 
-    instance_url: Optional[str]
+    instance_url: str | None
     """URL of the running app instance (present only when *running*)."""
 
     additional_data: dict = field(default_factory=dict)
@@ -129,7 +128,7 @@ def _ssdp_request() -> bytes:
     return (
         "M-SEARCH * HTTP/1.1\r\n"
         f"HOST: {_SSDP_ADDR}:{_SSDP_PORT}\r\n"
-        "MAN: \"ssdp:discover\"\r\n"
+        'MAN: "ssdp:discover"\r\n'
         f"MX: {_SSDP_MX}\r\n"
         f"ST: {_SSDP_ST}\r\n"
         "\r\n"
@@ -146,7 +145,7 @@ def _parse_ssdp_response(raw: bytes) -> dict[str, str]:
     return headers
 
 
-def _fetch_device_description(location: str, timeout: float) -> Optional[dict]:
+def _fetch_device_description(location: str, timeout: float) -> dict | None:
     """
     Fetch and parse a UPnP device description XML from *location*.
 
@@ -159,12 +158,14 @@ def _fetch_device_description(location: str, timeout: float) -> Optional[dict]:
         logger.debug("Failed to fetch device description from %s: %s", location, exc)
         return None
 
-    app_url: Optional[str] = resp.headers.get("Application-URL")
+    app_url: str | None = resp.headers.get("Application-URL")
 
     try:
         root = ET.fromstring(resp.text)
     except ET.ParseError as exc:
-        logger.debug("Failed to parse device description XML from %s: %s", location, exc)
+        logger.debug(
+            "Failed to parse device description XML from %s: %s", location, exc
+        )
         return None
 
     def _find(tag: str, ns: str = "upnp") -> str:
@@ -176,10 +177,10 @@ def _fetch_device_description(location: str, timeout: float) -> Optional[dict]:
 
     return {
         "friendly_name": _find("friendlyName"),
-        "manufacturer":  _find("manufacturer"),
-        "model_name":    _find("modelName"),
-        "udn":           _find("UDN"),
-        "app_url":       app_url,
+        "manufacturer": _find("manufacturer"),
+        "model_name": _find("modelName"),
+        "udn": _find("UDN"),
+        "app_url": app_url,
     }
 
 
@@ -216,7 +217,7 @@ def discover_devices(
         while time.monotonic() < deadline and len(seen) < max_devices:
             try:
                 data, _ = sock.recvfrom(4096)
-            except socket.timeout:
+            except TimeoutError:
                 break
             location = _parse_ssdp_response(data).get("location", "")
             if location and location not in seen:
@@ -231,12 +232,12 @@ def discover_devices(
         if not info or not info.get("app_url"):
             continue
         device = DIALDevice(
-            friendly_name = info["friendly_name"] or location,
-            manufacturer  = info["manufacturer"],
-            model_name    = info["model_name"],
-            app_url       = info["app_url"].rstrip("/"),
-            udn           = info["udn"],
-            location      = location,
+            friendly_name=info["friendly_name"] or location,
+            manufacturer=info["manufacturer"],
+            model_name=info["model_name"],
+            app_url=info["app_url"].rstrip("/"),
+            udn=info["udn"],
+            location=location,
         )
         devices.append(device)
         logger.info("Discovered: %s", device)
@@ -276,13 +277,15 @@ class DIALClient:
     """
 
     def __init__(self, device: DIALDevice, http_timeout: float = 8.0) -> None:
-        self._device  = device
+        self._device = device
         self._timeout = http_timeout
         self._session = requests.Session()
-        self._session.headers.update({
-            "Content-Type": "text/plain; charset=utf-8",
-            "Origin": "package:com.google.android.youtube.tv",
-        })
+        self._session.headers.update(
+            {
+                "Content-Type": "text/plain; charset=utf-8",
+                "Origin": "package:com.google.android.youtube.tv",
+            }
+        )
 
     # ------------------------------------------------------------------
     # Properties
@@ -340,9 +343,13 @@ class DIALClient:
         root = ET.fromstring(resp.text)
 
         state_el = root.find(f"{{{_NS['dial']}}}state")
-        state    = state_el.text.strip() if state_el is not None and state_el.text else "unknown"
+        state = (
+            state_el.text.strip()
+            if state_el is not None and state_el.text
+            else "unknown"
+        )
 
-        instance_url: Optional[str] = resp.headers.get("Location")
+        instance_url: str | None = resp.headers.get("Location")
         link_el = root.find(f"{{{_NS['dial']}}}link")
         if link_el is not None:
             instance_url = link_el.get("href") or instance_url
@@ -355,10 +362,10 @@ class DIALClient:
                 additional[tag] = child.text or ""
 
         return AppState(
-            name            = app_name,
-            state           = state,
-            instance_url    = instance_url,
-            additional_data = additional,
+            name=app_name,
+            state=state,
+            instance_url=instance_url,
+            additional_data=additional,
         )
 
     def launch(self, app_name: str, params: str | dict) -> str:
@@ -379,11 +386,13 @@ class DIALClient:
             The ``Location`` header of the newly started app instance.
         """
         body = urllib.parse.urlencode(params) if isinstance(params, dict) else params
-        url  = self._app_endpoint(app_name)
+        url = self._app_endpoint(app_name)
         logger.debug("DIAL POST %s  body=%s", url, body)
         resp = self._post(url, body)
         location = resp.headers.get("Location", "")
-        logger.info("Launched %s on %s → %s", app_name, self._device.friendly_name, location)
+        logger.info(
+            "Launched %s on %s → %s", app_name, self._device.friendly_name, location
+        )
         return location
 
     def stop(self, app_name: str) -> bool:
@@ -406,8 +415,12 @@ class DIALClient:
         """
         state = self.get_app_state(app_name)
         if state.state != "running":
-            logger.info("%s is not running on %s (state=%s)",
-                        app_name, self._device.friendly_name, state.state)
+            logger.info(
+                "%s is not running on %s (state=%s)",
+                app_name,
+                self._device.friendly_name,
+                state.state,
+            )
             return False
 
         target = state.instance_url or self._app_endpoint(app_name) + "/run"
@@ -427,7 +440,7 @@ class DIALClient:
         port: int = 8008,
         app_path: str = "/apps",
         **kwargs,
-    ) -> "DIALClient":
+    ) -> DIALClient:
         """
         Build a :class:`DIALClient` directly from a host address (no SSDP).
 
@@ -448,11 +461,11 @@ class DIALClient:
             client.launch("YouTube", {"v": "dQw4w9WgXcQ"})
         """
         device = DIALDevice(
-            friendly_name = host,
-            manufacturer  = "",
-            model_name    = "",
-            app_url       = f"http://{host}:{port}{app_path}",
-            udn           = "",
-            location      = "",
+            friendly_name=host,
+            manufacturer="",
+            model_name="",
+            app_url=f"http://{host}:{port}{app_path}",
+            udn="",
+            location="",
         )
         return cls(device, **kwargs)

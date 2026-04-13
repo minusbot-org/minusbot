@@ -3,6 +3,22 @@ import { ShellManager } from "../sandbox/shell";
 import { commandManager } from "../commands";
 import { UserManager } from "../data/users";
 
+// Allowed commands whitelist for security
+const ALLOWED_COMMANDS = new Set([
+    'ls', 'cat', 'echo', 'pwd', 'date', 'whoami', 'id',
+    'grep', 'find', 'head', 'tail', 'wc', 'sort', 'uniq',
+    'mkdir', 'rm', 'cp', 'mv', 'chmod', 'chown',
+    'df', 'du', 'top', 'ps', 'netstat', 'ss', 'ip',
+    'curl', 'wget', 'ping', 'dig', 'host', 'nslookup',
+    'tar', 'gzip', 'unzip', 'zip', 'diff', 'cmp',
+    'readlink', 'file', 'stat', 'hexdump', 'od',
+    'who', 'w', 'uptime', 'free', 'vmstat', 'iostat',
+    'hostname', 'uname', 'env', 'printenv', 'which', 'whereis'
+]);
+
+const MAX_OUTPUT_SIZE = 1024 * 1024 * 10; // 10MB
+const MAX_INPUT_SIZE = 1024 * 10; // 10KB
+
 // Commands
 
 commandManager.register({
@@ -25,7 +41,7 @@ commandManager.register({
 
 commandManager.register({
     name: "shell",
-    description: "Manage interactive shells.",
+    description: "Manage interactive shells. Only whitelisted commands allowed. Available: " + Array.from(ALLOWED_COMMANDS).sort().join(", "),
     usage: "/shell exec [workspaceId] <cmd> | execbg [workspaceId] <cmd> | read <id> [wait] | readbuf <id> <bytes> | write <id> <input> | kill <id> | ls [workspaceId]",
     handler: async (args, { user, chat }) => {
         const sub = args[0];
@@ -39,6 +55,14 @@ commandManager.register({
                     workspaceId = "chat";
                 }
                 if (!cmd) return "Usage: /shell exec [workspaceId] <command>";
+                
+                // Validate command
+                const parts = cmd.split(' ');
+                const baseCommand = parts[0];
+                if (!ALLOWED_COMMANDS.has(baseCommand)) {
+                    return `Error: Command '${baseCommand}' is not allowed. Allowed commands: ${Array.from(ALLOWED_COMMANDS).sort().slice(0, 10).join(", ")}...`;
+                }
+                
                 return await ShellManager.create(user.id, workspaceId, cmd, false, 30000, chat.meta.id);
             }
             if (sub === "execbg") {
@@ -49,6 +73,14 @@ commandManager.register({
                     workspaceId = "chat";
                 }
                 if (!cmd) return "Usage: /shell execbg [workspaceId] <command>";
+                
+                // Validate command
+                const parts = cmd.split(' ');
+                const baseCommand = parts[0];
+                if (!ALLOWED_COMMANDS.has(baseCommand)) {
+                    return `Error: Command '${baseCommand}' is not allowed. Allowed commands: ${Array.from(ALLOWED_COMMANDS).sort().slice(0, 10).join(", ")}...`;
+                }
+                
                 const id = await ShellManager.create(user.id, workspaceId, cmd, true, 30000, chat.meta.id);
                 return `Shell started in background. ID: ${id}`;
             }
@@ -95,12 +127,15 @@ toolManager.registerTool({
     type: "function",
     function: {
         name: "shell_create",
-        description: "Create a new shell session. If bg=false, waits for output. Use workspaceId='chat' to use the current chat space. IMPORTANT: For interactive commands (ssh, python, node, etc) requiring input or long running, use bg=true and interact via shell_stdout/shell_stdin.",
+        description: "Create a new shell session. If bg=false, waits for output. Use workspaceId='chat' to use the current chat space. Only allows whitelisted commands. IMPORTANT: For interactive commands (ssh, python, node, etc) requiring input or long running, use bg=true and interact via shell_stdout/shell_stdin.",
         parameters: {
             type: "object",
             properties: {
                 workspaceId: { type: "string" },
-                command: { type: "string" },
+                command: { 
+                    type: "string",
+                    description: "List of whitelisted commands: " + Array.from(ALLOWED_COMMANDS).sort().join(", ")
+                },
                 bg: { type: "boolean", description: "Run in background? Default false for oneshot commands, true for tty/stdin based commands like ssh and TUIs." },
                 timeout: { type: "number", description: "Timeout in ms if bg=false. Default 30000." }
             },
@@ -109,7 +144,21 @@ toolManager.registerTool({
     }
 }, async ({ workspaceId, command, bg, timeout }, { chat }) => {
     try {
-        const result = await ShellManager.create(chat.meta.owner, workspaceId, command, bg, timeout, chat.meta.id);
+        // CRITICAL: Validate command against whitelist
+        const cmd = command.trim();
+        const parts = cmd.split(' ');
+        const baseCommand = parts[0];
+        
+        if (!ALLOWED_COMMANDS.has(baseCommand)) {
+            return `Error: Command '${baseCommand}' is not allowed. Allowed commands: ${Array.from(ALLOWED_COMMANDS).sort().slice(0, 10).join(", ")}...`;
+        }
+
+        // Check input size
+        if (cmd.length > MAX_INPUT_SIZE) {
+            return `Error: Command too long. Maximum ${MAX_INPUT_SIZE} characters.`;
+        }
+
+        const result = await ShellManager.create(user.id, workspaceId, cmd, bg, timeout, chat.meta.id);
         return result;
     } catch (e: any) {
         return `Error: ${e.message}`;

@@ -48,7 +48,7 @@ export class ShellManager {
                         writable: true
                     }
                 ],
-                networkMode: "host",
+                networkMode: "none", // Security: default to no network access
                 openStdin: true,
                 workingDir: "/workspace",
                 maxBufferSize: 1024 * 1024, // 1MB buffer limit

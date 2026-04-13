@@ -44,19 +44,32 @@ export async function startServer() {
     const server = http.createServer(app);
 
     const isDev = process.env.NODE_ENV === "dev";
+    
+    // Security: White-list allowed origins instead of using *
+    const allowedOrigins = isDev
+        ? ['http://localhost:5173', 'http://127.0.0.1:5173']
+        : [process.env.FRONTEND_URL || 'https://app.minusbot.ai'];
+
+    const corsOptions = {
+        origin: (origin: string | undefined, callback: any) => {
+            if (!origin || allowedOrigins.includes(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
+        },
+        credentials: true,
+        maxAge: 86400,
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization']
+    };
 
     // Socket.IO setup
     const io = new SocketIOServer(server, {
-        cors: {
-            origin: isDev ? "*" : true,
-            credentials: true
-        }
+        cors: corsOptions
     });
 
-    app.use(cors({
-        origin: isDev ? "*" : true,
-        credentials: true
-    }));
+    app.use(cors(corsOptions));
     app.use(express.json());
 
     // --- API Routes ---
