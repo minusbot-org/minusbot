@@ -181,14 +181,33 @@ pub struct ToolResult {
 // --- Provider ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProviderRequest {
+pub struct TextInferenceOptions {
+    pub api_key: String,
     pub model: String,
+    pub endpoint: Option<String>,
+    pub temperature: f32,
+    pub max_tokens: Option<u32>,
+    pub top_p: f32,
+}
+
+impl Default for TextInferenceOptions {
+    fn default() -> Self {
+        Self {
+            api_key: String::new(),
+            model: String::new(),
+            endpoint: None,
+            temperature: 0.7,
+            max_tokens: None,
+            top_p: 1.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderRequest {
     pub messages: Vec<ProviderMessage>,
     pub tools: Vec<ToolDefinition>,
-    pub temperature: Option<f32>,
-    pub max_tokens: Option<u32>,
-    pub top_p: Option<f32>,
-    pub secret_key: Option<String>,
+    pub options: TextInferenceOptions,
     pub metadata: Option<serde_json::Value>,
 }
 
@@ -257,6 +276,7 @@ pub struct ToolContext {
 #[derive(Debug, Clone)]
 pub struct ChannelContext {
     pub channel_id: ChannelId,
+    pub config_dir: std::path::PathBuf,
 }
 
 // --- Secret declarations ---

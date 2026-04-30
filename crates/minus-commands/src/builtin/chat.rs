@@ -49,19 +49,14 @@ impl Command for ChatListCommand {
                     Some(c) => {
                         let mut response = format!("SWITCH_CHAT_ID:{}", c.id);
                         
-                        // If unix channel, also send history
-                        if ctx.channel_id.0 == "unix" {
-                            let messages = db.get_messages(&c.id, 10).await?;
-                            if !messages.is_empty() {
-                                response.push_str("\n\nHistory restored:\n");
-                                let lines: Vec<String> = messages.iter().rev()
-                                    .map(|m| format!("\x1b[90m[{}]\x1b[0m \x1b[1;35m{}\x1b[0m: {}", 
-                                        m.created_at.split('T').collect::<Vec<_>>().get(1).unwrap_or(&m.created_at.as_str()), 
-                                        m.role, m.content))
-                                    .collect();
-                                response.push_str(&lines.join("\n"));
+                        // Attempt to update channel config
+                        let provider_id = format!("channel.{}", ctx.channel_id.0);
+                        if let Some(channel_config) = ctx.config_registry.get_provider(&provider_id).await {
+                            if let Err(e) = channel_config.set_config("chat", &c.id).await {
+                                let _ = ctx.channel.send_warning(&ctx.chat_id, &format!("Failed to save default chat to config: {}", e)).await;
                             }
                         }
+                        
                         Ok(response)
                     }
                     None => Ok(format!("Chat '{}' not found.", id)),

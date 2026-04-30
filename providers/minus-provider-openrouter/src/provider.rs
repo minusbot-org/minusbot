@@ -1,6 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use minus_core::*;
+use std::sync::Arc;
 
 /// OpenRouter provider — wraps the OpenAI-compatible provider with OpenRouter's base URL.
 pub struct OpenRouterProvider {
@@ -8,10 +9,10 @@ pub struct OpenRouterProvider {
 }
 
 impl OpenRouterProvider {
-    pub fn new(api_key: Option<String>, base_url: Option<String>) -> Self {
+    pub fn new(api_key: Option<String>, base_url: Option<String>, config_path: Option<std::path::PathBuf>) -> Self {
         let base = base_url.unwrap_or_else(|| "https://openrouter.ai/api/v1".to_string());
         Self {
-            inner: minus_provider_openai::OpenAiProvider::new(api_key, Some(base)),
+            inner: minus_provider_openai::OpenAiProvider::new(api_key, Some(base), config_path),
         }
     }
 }
@@ -26,19 +27,26 @@ impl Provider for OpenRouterProvider {
         "OpenRouter"
     }
 
-    fn capabilities(&self) -> ProviderCapabilities {
-        self.inner.capabilities()
+    fn config(&self) -> Option<Arc<dyn ConfigProvider>> {
+        self.inner.config()
     }
 
-    async fn complete(&self, request: ProviderRequest) -> Result<ProviderResponse> {
-        self.inner.complete(request).await
+    fn as_text_provider(&self) -> Option<&dyn TextProvider> {
+        Some(self)
     }
 
-    async fn list_models(&self, secret_key: Option<String>) -> Result<Vec<String>> {
-        self.inner.list_models(secret_key).await
-    }
-
-    async fn is_ready(&self) -> Result<bool> {
+    async fn is_ready(&self) -> Result<()> {
         self.inner.is_ready().await
+    }
+}
+
+#[async_trait]
+impl TextProvider for OpenRouterProvider {
+    async fn complete_text(&self, request: ProviderRequest) -> Result<ProviderResponse> {
+        self.inner.complete_text(request).await
+    }
+
+    async fn get_text_models(&self, secret_key: Option<String>) -> Result<Vec<String>> {
+        self.inner.get_text_models(secret_key).await
     }
 }

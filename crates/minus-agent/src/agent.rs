@@ -10,12 +10,15 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+use minus_vault::Vault;
+
 /// The Agent orchestrates the conversation loop:
 /// incoming message → history → skills → tools → provider → response.
 pub struct Agent {
     db: Database,
     config: Arc<RwLock<AppConfig>>,
     secrets: Arc<RwLock<SecretsManager>>,
+    vault: Option<Arc<Vault>>,
     providers: Arc<RwLock<ProviderRegistry>>,
     tools: Arc<RwLock<ToolRegistry>>,
     skills: Arc<SkillManager>,
@@ -27,6 +30,7 @@ impl Agent {
         db: Database,
         config: Arc<RwLock<AppConfig>>,
         secrets: Arc<RwLock<SecretsManager>>,
+        vault: Option<Arc<Vault>>,
         providers: Arc<RwLock<ProviderRegistry>>,
         tools: Arc<RwLock<ToolRegistry>>,
         skills: Arc<SkillManager>,
@@ -36,6 +40,7 @@ impl Agent {
             db,
             config,
             secrets,
+            vault,
             providers,
             tools,
             skills,
@@ -65,13 +70,8 @@ impl Agent {
             None => return Ok("No LLM provider is configured. Use `/providers <id>` to set one.".to_string()),
         };
         
-        match provider.is_ready().await {
-            Ok(ready) => {
-                if !ready {
-                    return Ok(format!("Provider '{}' is not ready. Have you configured its API key? (e.g., `/secrets`)", provider.id()));
-                }
-            }
-            Err(e) => return Ok(format!("Error checking provider readiness: {}", e)),
+        if let Err(e) = provider.is_ready().await {
+            return Ok(format!("Provider '{}' is not ready: {}", provider.id(), e));
         }
         drop(providers);
 
@@ -176,24 +176,38 @@ impl Agent {
         let providers = self.providers.read().await;
         let model = providers
             .default_model()
-            .unwrap_or("gpt-4o-mini")
+            .unwrap_or("")
             .to_string();
 
         let provider_id = providers.default_id().unwrap_or("unknown");
-        let secret_key = {
+        let key_name = format!("PROVIDER_{}_API_KEY", provider_id.to_uppercase());
+
+        let api_key = if let Some(vault) = &self.vault {
+            match vault.get_secret(&key_name) {
+                Ok(bytes) => String::from_utf8_lossy(&bytes).to_string(),
+                Err(_) => {
+                    let sec = self.secrets.read().await;
+                    sec.get(&key_name).map(|s| s.to_string()).unwrap_or_default()
+                }
+            }
+        } else {
             let sec = self.secrets.read().await;
-            let key_name = format!("SECRET_{}_API_KEY", provider_id.to_uppercase());
-            sec.get(&key_name).map(|s| s.to_string())
+            sec.get(&key_name).map(|s| s.to_string()).unwrap_or_default()
+        };
+
+        let options = TextInferenceOptions {
+            api_key,
+            model,
+            endpoint: None, // Could be fetched from config later
+            temperature: prov_cfg.temperature.unwrap_or(0.7),
+            max_tokens: prov_cfg.max_tokens,
+            top_p: prov_cfg.top_p.unwrap_or(1.0),
         };
 
         let mut request = ProviderRequest {
-            model,
             messages,
             tools: tool_defs.clone(),
-            temperature: prov_cfg.temperature,
-            max_tokens: prov_cfg.max_tokens,
-            top_p: prov_cfg.top_p,
-            secret_key,
+            options,
             metadata: None,
         };
 

@@ -25,6 +25,7 @@ impl DataDir {
     pub fn ensure_dirs(&self) -> Result<()> {
         let dirs = [
             self.root.as_path(),
+            &self.config_dir(),
             &self.skills_dir(),
             &self.drive_dir(),
             &self.logs_dir(),
@@ -40,8 +41,16 @@ impl DataDir {
         Ok(())
     }
 
+    pub fn config_dir(&self) -> PathBuf {
+        self.root.join("config")
+    }
+
     pub fn config_path(&self) -> PathBuf {
-        self.root.join("config.toml")
+        self.config_dir().join("main.toml")
+    }
+
+    pub fn component_config_path(&self, kind: &str, id: &str) -> PathBuf {
+        self.config_dir().join(format!("{}-{}.toml", kind, id))
     }
 
     pub fn secrets_env_path(&self) -> PathBuf {

@@ -34,14 +34,13 @@ impl SubVault {
         self.vault.delete_secret(&self.prefixed_key(key))
     }
 
-    pub fn list_secrets(&self) -> Result<Vec<crate::vault::VaultSecretInfo>> {
-        let all = self.vault.list_secrets()?;
+    pub fn list_secrets(&self) -> Result<Vec<String>> {
+        let all = self.vault.list_keys();
         let filtered = all.into_iter()
-            .filter(|s| s.key.starts_with(&self.prefix))
-            .map(|mut s| {
+            .filter(|k| k.starts_with(&self.prefix))
+            .map(|k| {
                 // Strip the prefix so the caller just sees their isolated keys
-                s.key = s.key.strip_prefix(&self.prefix).unwrap_or(&s.key).to_string();
-                s
+                k.strip_prefix(&self.prefix).unwrap_or(&k).to_string()
             })
             .collect();
         Ok(filtered)

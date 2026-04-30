@@ -83,7 +83,7 @@ pub struct ProviderConfig {
     #[serde(default)]
     pub default: Option<String>,
     #[serde(default)]
-    pub model: Option<String>,
+    pub text_model: Option<String>,
     #[serde(default)]
     pub max_tokens: Option<u32>,
     #[serde(default)]
@@ -96,7 +96,7 @@ impl Default for ProviderConfig {
     fn default() -> Self {
         Self {
             default: None,
-            model: None,
+            text_model: None,
             max_tokens: None,
             temperature: None,
             top_p: None,

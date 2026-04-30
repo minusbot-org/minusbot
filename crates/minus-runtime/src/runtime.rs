@@ -17,6 +17,7 @@ pub struct Runtime {
     pub db: Database,
     pub config: Arc<RwLock<AppConfig>>,
     pub config_path: std::path::PathBuf,
+    pub config_dir: std::path::PathBuf,
     pub secrets: Arc<RwLock<SecretsManager>>,
     pub vault: Option<Arc<Vault>>,
     pub policy: Arc<PolicyEngine>,
@@ -26,6 +27,7 @@ pub struct Runtime {
     pub scheduler: Arc<Scheduler>,
     pub agent: Arc<Agent>,
     pub commands: Arc<RwLock<minus_commands::CommandRegistry>>,
+    pub config_providers: Arc<RwLock<std::collections::HashMap<String, Arc<dyn minus_api::traits::ConfigProvider>>>>,
     pub shutdown_tx: tokio::sync::broadcast::Sender<()>,
 }
 
@@ -34,8 +36,17 @@ impl Runtime {
     pub async fn process_message(
         runtime: Arc<Runtime>,
         incoming: &IncomingMessage,
+        channel: Arc<dyn minus_api::traits::Channel>,
     ) -> Result<String> {
         let content = incoming.content.trim();
+
+        // Auto-create chat if it doesn't exist
+        let _ = runtime.db.ensure_chat(
+            &incoming.chat_id.0,
+            &incoming.channel_id.0,
+            &incoming.chat_id.0,
+            None
+        ).await;
 
         if minus_commands::is_slash_command(content) {
             let parsed = minus_commands::parse_slash_command(content);
@@ -51,7 +62,9 @@ impl Runtime {
                     db: runtime_arc.clone(),
                     providers: runtime_arc.clone(),
                     config: runtime_arc.clone(),
+                    config_registry: runtime_arc.clone(),
                     secrets: runtime_arc.clone(),
+                    channel: channel.clone(),
                     all_commands: reg.list(),
                     shutdown_trigger: Some(runtime.shutdown_tx.clone()),
                 };
@@ -287,37 +300,71 @@ impl minus_api::traits::MinusProviders for Runtime {
     async fn list_providers(&self) -> Result<Vec<(String, String)>> {
         Ok(self.providers.read().await.list())
     }
+
     async fn set_default_provider(&self, id: &str) -> Result<()> {
-        self.providers.write().await.set_default(id)
-    }
-    async fn list_models(&self, provider_id: &str) -> Result<Vec<String>> {
-        let reg = self.providers.read().await;
-        if let Some(p) = reg.get(provider_id) {
-            p.list_models(None).await
-        } else {
-            anyhow::bail!("Provider not found")
+        self.providers.write().await.set_default(id)?;
+
+        let mut cfg = self.config.write().await;
+        cfg.provider.default = Some(id.to_string());
+        cfg.save(&self.config_path)?;
+
+        // Load previously-saved text_model for this provider
+        let providers = self.providers.read().await;
+        if let Some(p) = providers.get(id) {
+            if let Some(cp) = p.config() {
+                if let Ok(Some(model)) = cp.read_config("text_model").await {
+                    self.providers.write().await.set_default_model(&model);
+                }
+            }
         }
+        Ok(())
     }
+
+    async fn list_text_models(&self) -> Result<Vec<String>> {
+        let provider_id = self.get_default_provider_id().await?;
+        let key_name = format!("PROVIDER_{}_API_KEY", provider_id.to_uppercase());
+
+        let secret_key = if let Some(vault) = &self.vault {
+            match vault.get_secret(&key_name) {
+                Ok(bytes) => Some(String::from_utf8_lossy(&bytes).to_string()),
+                Err(_) => {
+                    let sec = self.secrets.read().await;
+                    sec.get(&key_name).map(|s| s.to_string())
+                }
+            }
+        } else {
+            let sec = self.secrets.read().await;
+            sec.get(&key_name).map(|s| s.to_string())
+        };
+
+        self.providers.read().await.get_text_models(secret_key).await
+    }
+
     async fn get_default_provider_id(&self) -> Result<String> {
-        Ok(self
-            .providers
-            .read()
-            .await
-            .default_id()
-            .unwrap_or("")
-            .to_string())
+        Ok(self.providers.read().await.default_id().unwrap_or("").to_string())
     }
-    async fn get_default_model(&self) -> Result<String> {
-        Ok(self
-            .providers
-            .read()
-            .await
-            .default_model()
-            .unwrap_or("")
-            .to_string())
+
+    async fn get_default_text_model(&self) -> Result<String> {
+        Ok(self.providers.read().await.default_model().unwrap_or("").to_string())
     }
-    async fn set_default_model(&self, model: &str) -> Result<()> {
-        self.providers.write().await.set_default_model(model).await
+
+    async fn set_default_text_model(&self, model: &str) -> Result<()> {
+        self.providers.write().await.set_default_model(model);
+
+        // Persist to provider's own config file
+        let providers = self.providers.read().await;
+        if let Some(p) = providers.default_provider() {
+            if let Some(cp) = p.config() {
+                cp.set_config("text_model", model).await?;
+                return Ok(());
+            }
+        }
+
+        // Fallback: save to main config
+        let mut cfg = self.config.write().await;
+        cfg.provider.text_model = Some(model.to_string());
+        cfg.save(&self.config_path)?;
+        Ok(())
     }
 }
 
@@ -338,5 +385,21 @@ impl minus_api::traits::MinusConfig for Runtime {
         *cfg = serde_json::from_value(current)?;
         cfg.save(&self.config_path)?;
         Ok(())
+    }
+}
+
+#[minus_api::async_trait]
+impl minus_api::traits::MinusConfigRegistry for Runtime {
+    async fn get_provider(&self, id: &str) -> Option<Arc<dyn minus_api::traits::ConfigProvider>> {
+        self.config_providers.read().await.get(id).cloned()
+    }
+
+    async fn list_providers(&self) -> Vec<Arc<dyn minus_api::traits::ConfigProvider>> {
+        self.config_providers.read().await.values().cloned().collect()
+    }
+
+    async fn register(&self, provider: Arc<dyn minus_api::traits::ConfigProvider>) {
+        let id = provider.id().to_string();
+        self.config_providers.write().await.insert(id, provider);
     }
 }

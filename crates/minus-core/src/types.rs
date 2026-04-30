@@ -257,6 +257,7 @@ pub struct ToolContext {
 #[derive(Debug, Clone)]
 pub struct ChannelContext {
     pub channel_id: ChannelId,
+    pub config_dir: std::path::PathBuf,
 }
 
 // --- Secret declarations ---

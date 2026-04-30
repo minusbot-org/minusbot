@@ -1,5 +1,5 @@
 [package]
-name = "minus-channel-unix"
+name = "minus-channel-cli"
 version = "0.1.0"
 edition = "2021"
 
@@ -12,3 +12,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 futures = "0.3"
+rand.workspace = true
+toml.workspace = true
+minus-api = { version = "0.1.0", path = "../../crates/minus-api" }

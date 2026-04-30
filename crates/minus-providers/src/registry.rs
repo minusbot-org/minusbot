@@ -70,24 +70,43 @@ impl ProviderRegistry {
         self.default_id.is_some()
     }
 
-    /// Call the default provider with the given request.
-    pub async fn complete(&self, mut request: ProviderRequest) -> Result<ProviderResponse> {
+    /// Call the default provider's text completion.
+    pub async fn complete(&self, request: ProviderRequest) -> Result<ProviderResponse> {
         let provider = self
             .default_provider()
             .with_context(|| "No default provider configured")?;
-        
+
+        let text_provider = provider
+            .as_text_provider()
+            .with_context(|| format!("Provider '{}' does not support text generation", provider.id()))?;
+
         // Use default model if not specified in request
-        if request.model.is_empty() {
+        let mut request = request;
+        if request.options.model.is_empty() {
             if let Some(model) = &self.default_model {
-                request.model = model.clone();
+                request.options.model = model.clone();
             } else {
-                bail!("No model specified and no default model configured");
+                bail!("No model specified and no default text model configured");
             }
         }
 
-        provider.complete(request).await
+        text_provider.complete_text(request).await
+    }
+
+    /// Get text models for the default provider.
+    pub async fn get_text_models(&self, secret_key: Option<String>) -> Result<Vec<String>> {
+        let provider = self
+            .default_provider()
+            .with_context(|| "No default provider configured")?;
+
+        let text_provider = provider
+            .as_text_provider()
+            .with_context(|| format!("Provider '{}' does not support text generation", provider.id()))?;
+
+        text_provider.get_text_models(secret_key).await
     }
 }
+
 
 impl Default for ProviderRegistry {
     fn default() -> Self {
@@ -102,27 +121,19 @@ impl minus_api::traits::MinusProviders for ProviderRegistry {
     async fn list_providers(&self) -> Result<Vec<(String, String)>> {
         Ok(self.list())
     }
-    async fn set_default_provider(&self, id: &str) -> Result<()> {
-        // Wait, self is &self, but ProviderRegistry needs &mut self for set_default.
-        // This means I need to wrap it in a RwLock if I want to change it via trait.
-        // Or I can change the trait to be interiorly mutable if possible.
-        // Actually, ProviderRegistry is usually inside a RwLock in Runtime.
+    async fn set_default_provider(&self, _id: &str) -> Result<()> {
         anyhow::bail!("Cannot set default provider on immutable registry. Use RwLock wrapper.")
     }
-    async fn list_models(&self, provider_id: &str) -> Result<Vec<String>> {
-        if let Some(p) = self.get(provider_id) {
-            p.list_models(None).await
-        } else {
-            anyhow::bail!("Provider not found")
-        }
+    async fn list_text_models(&self) -> Result<Vec<String>> {
+        self.get_text_models(None).await
     }
     async fn get_default_provider_id(&self) -> Result<String> {
         Ok(self.default_id().unwrap_or("").to_string())
     }
-    async fn get_default_model(&self) -> Result<String> {
+    async fn get_default_text_model(&self) -> Result<String> {
         Ok(self.default_model().unwrap_or("").to_string())
     }
-    async fn set_default_model(&self, _model: &str) -> Result<()> {
+    async fn set_default_text_model(&self, _model: &str) -> Result<()> {
         anyhow::bail!("Cannot set default model on immutable registry.")
     }
 }

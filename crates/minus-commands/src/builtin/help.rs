@@ -36,7 +36,7 @@ impl Command for HelpCommand {
                 format!(" (aliases: {})", cmd.aliases.join(", "))
             };
             
-            help.push_str(&format!("  {} {:<25} — {}{}\n", "/", cmd.usage, cmd.description, aliases));
+            help.push_str(&format!("  {:<25} — {}{}\n", cmd.usage, cmd.description, aliases));
         }
 
         Ok(help)

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use minus_agent::Agent;
-use minus_channel_unix::UnixChannel;
+use minus_channel_cli::CliChannel;
 use minus_core::*;
 use minus_db::Database;
 use minus_env::{AppConfig, DataDir, SecretsManager};
@@ -52,7 +52,8 @@ async fn main() -> Result<()> {
     tracing::info!("Starting minusbot v{} (debug: {})", VERSION, debug_mode);
     
     // Instance lock check
-    let socket_path = data_dir.root.join("minusd.sock");
+    let _socket_path = data_dir.root.join("minusd.sock");
+    #[cfg(unix)]
     if socket_path.exists() {
         if tokio::net::UnixStream::connect(&socket_path).await.is_ok() {
             tracing::error!("Another instance of minusd is already running.");
@@ -70,42 +71,43 @@ async fn main() -> Result<()> {
         config_raw.core.first_run = false;
         config_raw.save(&data_dir.config_path())?;
     }
-    let config = Arc::new(RwLock::new(config_raw));
+    let config = Arc::new(RwLock::new(config_raw.clone()));
+
+    // Print startup banner
+    {
+        let provider_display = config_raw.provider.default.as_deref().unwrap_or("(none)");
+        let model_display = config_raw.provider.text_model.as_deref().unwrap_or("(none)");
+
+        eprintln!();
+        eprintln!("\x1b[35m      ██    ██    \x1b[0m");
+        eprintln!("\x1b[35m      ██    ██    \x1b[0m");
+        eprintln!("\x1b[35m     ██████████   \x1b[0m");
+        eprintln!("\x1b[35m    ███ ████ ███  \x1b[0m  \x1b[1;36mMinusbot v{}\x1b[0m", VERSION);
+        eprintln!("\x1b[35m     ██████████   \x1b[0m  A self-hosted personal AI assistant");
+        eprintln!("\x1b[35m       ██████     \x1b[0m");
+        eprintln!("\x1b[35m      ███████     \x1b[0m");
+        eprintln!("\x1b[35m       ██  ██     \x1b[0m");
+        eprintln!();
+        
+        eprintln!("  \x1b[36mData dir\x1b[0m   -> \x1b[32m{}\x1b[0m", data_dir.root.display());
+        eprintln!("  \x1b[36mDatabase\x1b[0m   -> \x1b[32m{}\x1b[0m", data_dir.database_url());
+        eprintln!("  \x1b[36mProvider\x1b[0m   -> \x1b[33m{}\x1b[0m", provider_display);
+        eprintln!("  \x1b[36mModel\x1b[0m      -> \x1b[33m{}\x1b[0m", model_display);
+        eprintln!();
+    }
 
     // 4. Load secrets
-    let secrets_raw = SecretsManager::load(&data_dir.secrets_env_path())?;
+    let _secrets_raw = SecretsManager::load(&data_dir.secrets_env_path())?;
 
     // 5. Open database
     let db = Database::open(&data_dir.database_url()).await?;
 
     // 6. Initialize vault
-    let vault = {
-        let master_key = secrets_raw.get("MINUSBOT_VAULT_MASTER_KEY");
-        match master_key {
-            Some(key) if !key.is_empty() => match Vault::open(&data_dir.vault_dir(), key) {
-                Ok(v) => Some(Arc::new(v)),
-                Err(e) => {
-                    eprintln!("Warning: Failed to open vault: {}", e);
-                    None
-                }
-            },
-            _ => {
-                if first_run {
-                    let key = Vault::generate_master_key();
-                    let mut secrets_mut = secrets_raw.clone();
-                    secrets_mut.set("MINUSBOT_VAULT_MASTER_KEY", &key)?;
-                    eprintln!(
-                        "⚠ Generated development vault master key. \
-                         For production, set MINUSBOT_VAULT_MASTER_KEY."
-                    );
-                    match Vault::open(&data_dir.vault_dir(), &key) {
-                        Ok(v) => Some(Arc::new(v)),
-                        Err(_) => None,
-                    }
-                } else {
-                    None
-                }
-            }
+    let vault = match Vault::open(&data_dir.vault_dir()) {
+        Ok(v) => Some(Arc::new(v)),
+        Err(e) => {
+            eprintln!("Warning: Failed to open vault: {}", e);
+            None
         }
     };
 
@@ -124,11 +126,13 @@ async fn main() -> Result<()> {
         let sec = secrets.read().await;
         let openai_key = sec.get("PROVIDER_OPENAI_API_KEY").map(|s| s.to_string());
         let openai_base = sec.get("PROVIDER_OPENAI_ENDPOINT").map(|s| s.to_string());
-        provider_reg.register(Arc::new(OpenAiProvider::new(openai_key, openai_base)));
+        let openai_cfg = data_dir.component_config_path("provider", "openai");
+        provider_reg.register(Arc::new(OpenAiProvider::new(openai_key, openai_base, Some(openai_cfg))));
 
         let openrouter_key = sec.get("PROVIDER_OPENROUTER_API_KEY").map(|s| s.to_string());
         let openrouter_base = sec.get("PROVIDER_OPENROUTER_ENDPOINT").map(|s| s.to_string());
-        provider_reg.register(Arc::new(OpenRouterProvider::new(openrouter_key, openrouter_base)));
+        let openrouter_cfg = data_dir.component_config_path("provider", "openrouter");
+        provider_reg.register(Arc::new(OpenRouterProvider::new(openrouter_key, openrouter_base, Some(openrouter_cfg))));
     }
 
     {
@@ -136,7 +140,7 @@ async fn main() -> Result<()> {
         if let Some(default_id) = &cfg.provider.default {
             let _ = provider_reg.set_default(default_id);
         }
-        if let Some(model) = &cfg.provider.model {
+        if let Some(model) = &cfg.provider.text_model {
             provider_reg.set_default_model(model);
         }
     }
@@ -165,6 +169,7 @@ async fn main() -> Result<()> {
         db.clone(),
         config.clone(),
         secrets.clone(),
+        vault.clone(),
         providers.clone(),
         tools.clone(),
         skills.clone(),
@@ -197,6 +202,7 @@ async fn main() -> Result<()> {
         db: db.clone(),
         config: config.clone(),
         config_path: data_dir.config_path(),
+        config_dir: data_dir.config_dir(),
         secrets: secrets.clone(),
         vault,
         policy,
@@ -206,36 +212,30 @@ async fn main() -> Result<()> {
         scheduler,
         agent,
         commands,
+        config_providers: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         shutdown_tx: shutdown_tx.clone(),
     });
 
-    // 14. Print startup banner
-    {
-        let cfg = config.read().await;
-        let provider_display = cfg.provider.default.as_deref().unwrap_or("(none)");
-        let model_display = cfg.provider.model.as_deref().unwrap_or("(none)");
 
-        eprintln!("minusbot {}", VERSION);
-        eprintln!("data dir: {}", data_dir.root.display());
-        eprintln!("database: {}", data_dir.database_url());
-        eprintln!("channel: unix");
-        eprintln!("provider: {}", provider_display);
-        eprintln!("model: {}", model_display);
-        eprintln!();
-    }
 
-    // 15. Start Unix channel
+    // 15. Start CLI channel
     let (msg_tx, mut msg_rx) = mpsc::channel::<IncomingMessage>(64);
-    let unix_channel = Arc::new(UnixChannel::new(socket_path, msg_tx));
+    let config_dir = data_dir.root.join("config");
+    let cli_channel = Arc::new(CliChannel::new(msg_tx, config_dir.clone()));
+    
+    // Register as config provider
+    runtime.register(cli_channel.clone()).await;
 
-    // Spawn Unix listener
-    let chan = unix_channel.clone();
+    // Spawn CLI listener
+    let chan = cli_channel.clone();
+
     let chan_handle = tokio::spawn(async move {
         let ctx = ChannelContext {
-            channel_id: ChannelId("unix".into()),
+            channel_id: ChannelId("cli".into()),
+            config_dir,
         };
         if let Err(e) = chan.start(ctx).await {
-            tracing::error!(error = %e, "Unix channel error");
+            tracing::error!(error = %e, "CLI channel error");
         }
     });
 
@@ -245,12 +245,12 @@ async fn main() -> Result<()> {
     loop {
         tokio::select! {
             Some(incoming) = msg_rx.recv() => {
-                let response = match minus_runtime::Runtime::process_message(runtime.clone(), &incoming).await {
+                let response = match minus_runtime::Runtime::process_message(runtime.clone(), &incoming, cli_channel.clone()).await {
                     Ok(text) => text,
                     Err(e) => format!("Error: {}", e),
                 };
                 let out = OutgoingMessage::new(incoming.chat_id, response);
-                if let Err(e) = unix_channel.send(out).await {
+                if let Err(e) = cli_channel.send(out).await {
                     tracing::error!(error = %e, "Failed to send response");
                 }
             }

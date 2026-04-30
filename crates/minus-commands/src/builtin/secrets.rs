@@ -11,7 +11,7 @@ impl Command for SecretCommand {
             name: "secrets".into(),
             description: "Manage programmatic secret declarations".into(),
             aliases: vec![],
-            usage: "/secrets <list|approve|deny> <id>".into(),
+            usage: "/secrets <list|set|approve|deny> [args]".into(),
             category: "security".into(),
             min_args: 0,
         }
@@ -32,11 +32,25 @@ impl Command for SecretCommand {
             return Ok(format!("Secret declarations:\n{}", lines.join("\n")));
         }
 
+        let action = &args[0];
+        
+        if action == "set" {
+            if args.len() < 3 {
+                return Ok("Usage: /secrets set <key> <value>".into());
+            }
+            let key = &args[1];
+            let value = &args[2];
+            
+            let store = ctx.secrets.get_store("").await?;
+            store.put_secret(key, value.as_bytes()).await?;
+            
+            return Ok(format!("Successfully set secret: {}", key));
+        }
+
         if args.len() < 2 {
             return Ok("Usage: /secrets <approve|deny> <component_id/key>".into());
         }
 
-        let action = &args[0];
         let target = &args[1];
         let parts: Vec<&str> = target.split('/').collect();
         if parts.len() != 2 {

@@ -21,7 +21,7 @@ minus-tools = { path = "../../crates/minus-tools" }
 minus-providers = { path = "../../crates/minus-providers" }
 minus-provider-openai = { path = "../../providers/minus-provider-openai" }
 minus-provider-openrouter = { path = "../../providers/minus-provider-openrouter" }
-minus-channel-unix = { path = "../../channels/minus-channel-unix" }
+minus-channel-cli = { path = "../../channels/minus-channel-cli" }
 minus-integrations = { path = "../../crates/minus-integrations" }
 minus-addons = { path = "../../crates/minus-addons" }
 minus-agent = { path = "../../crates/minus-agent" }
@@ -33,3 +33,4 @@ tracing-subscriber = { workspace = true }
 tracing-appender = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+rand.workspace = true

@@ -1128,6 +1128,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
+name = "machine-uid"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26141aceb9f046065617266f41a4a652e4583da643472a10a89b4b3664d99eb6"
+dependencies = [
+ "winreg 0.11.0",
+]
+
+[[package]]
 name = "matchers"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1189,6 +1198,7 @@ dependencies = [
  "minus-providers",
  "minus-skills",
  "minus-tools",
+ "minus-vault",
  "serde",
  "serde_json",
  "tokio",
@@ -1206,20 +1216,24 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "toml",
  "uuid",
 ]
 
 [[package]]
-name = "minus-channel-unix"
+name = "minus-channel-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
  "futures",
+ "minus-api",
  "minus-core",
+ "rand",
  "serde",
  "serde_json",
  "tokio",
+ "toml",
  "tracing",
 ]
 
@@ -1461,11 +1475,13 @@ dependencies = [
  "anyhow",
  "base64",
  "chrono",
+ "machine-uid",
  "minus-core",
  "minus-db",
  "rand",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 1.0.69",
  "tracing",
 ]
@@ -1492,7 +1508,7 @@ dependencies = [
  "anyhow",
  "minus-addons",
  "minus-agent",
- "minus-channel-unix",
+ "minus-channel-cli",
  "minus-commands",
  "minus-core",
  "minus-db",
@@ -1508,6 +1524,7 @@ dependencies = [
  "minus-skills",
  "minus-tools",
  "minus-vault",
+ "rand",
  "serde",
  "serde_json",
  "tokio",
@@ -1979,7 +1996,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "winreg",
+ "winreg 0.50.0",
 ]
 
 [[package]]
@@ -3414,6 +3431,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df79d97927682d2fd8adb29682d1140b343be4ac0f08fd68b7765d9c059d3945"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "winreg"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76a1a57ff50e9b408431e8f97d5456f2807f8eb2a2cd79b06068fc87f8ecf189"
+dependencies = [
+ "cfg-if",
+ "winapi",
 ]
 
 [[package]]
