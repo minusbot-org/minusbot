@@ -1,0 +1,7 @@
+[package]
+name = "minus-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+minus-api = { path = "../minus-api" }

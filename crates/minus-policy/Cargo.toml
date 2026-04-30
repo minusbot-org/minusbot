@@ -1,0 +1,12 @@
+[package]
+name = "minus-policy"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+minus-core = { path = "../minus-core" }
+minus-env = { path = "../minus-env" }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

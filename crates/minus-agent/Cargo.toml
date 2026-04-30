@@ -1,0 +1,20 @@
+[package]
+name = "minus-agent"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+minus-core = { path = "../minus-core" }
+minus-db = { path = "../minus-db" }
+minus-env = { path = "../minus-env" }
+minus-providers = { path = "../minus-providers" }
+minus-tools = { path = "../minus-tools" }
+minus-skills = { path = "../minus-skills" }
+minus-policy = { path = "../minus-policy" }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }

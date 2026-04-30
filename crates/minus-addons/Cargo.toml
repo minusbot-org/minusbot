@@ -1,0 +1,12 @@
+[package]
+name = "minus-addons"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+minus-core = { path = "../minus-core" }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }

@@ -1,0 +1,17 @@
+[package]
+name = "minus-vault"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+minus-core = { path = "../minus-core" }
+minus-db = { path = "../minus-db" }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+aes-gcm = { workspace = true }
+rand = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }

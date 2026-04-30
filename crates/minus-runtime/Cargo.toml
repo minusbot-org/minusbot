@@ -1,0 +1,31 @@
+[package]
+name = "minus-runtime"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+minus-core = { path = "../minus-core" }
+minus-api = { path = "../minus-api" }
+minus-db = { path = "../minus-db" }
+minus-env = { path = "../minus-env" }
+minus-vault = { path = "../minus-vault" }
+minus-policy = { path = "../minus-policy" }
+minus-scheduler = { path = "../minus-scheduler" }
+minus-memory = { path = "../minus-memory" }
+minus-skills = { path = "../minus-skills" }
+minus-tools = { path = "../minus-tools" }
+minus-providers = { path = "../minus-providers" }
+minus-channels = { path = "../minus-channels" }
+minus-integrations = { path = "../minus-integrations" }
+minus-addons = { path = "../minus-addons" }
+minus-agent = { path = "../minus-agent" }
+minus-commands = { path = "../minus-commands" }
+sqlx = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+toml = { workspace = true }

@@ -1,0 +1,13 @@
+[package]
+name = "minus-provider-openai"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+minus-core = { path = "../../crates/minus-core" }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }

@@ -1,89 +1,99 @@
-# Minusbot 🤖
+# minusbot
 
-**Minusbot** is a powerful, secure, and modular AI Agent platform built with **Bun**, **TypeScript**, and **Docker**. It transforms LLMs into autonomous assistants capable of managing files, executing code, and integrating with third-party services—all while keeping your sensitive data protected.
+A self-hosted autonomous personal AI assistant runtime written in Rust.
 
----
+## Quick Start
 
-## 🎨 Dashboard
-Experience a state-of-the-art management interface with:
-- **Rich Aesthetics**: Deep dark mode with glassmorphism and vibrant accents.
-- **Real-time Telemetry**: Monitor token usage, message exchange, and efficiency heuristics.
-- **Full Control**: Manage users, vaults, and update system channels (Stable/Nightly) directly from the browser.
-
-## 🚀 Key Features
-
-### 🌐 Multi-Channel Communication
-Minusbot isn't bound to one interface. Connect your AI to:
-- **Telegram Bot**: Native bridge with file support.
-- **Discord Bot**: Slash command support and channel syncing.
-- **Web Chat**: Modern, real-time messaging interface.
-
-### �️ Isolated Environments (Workspaces)
-Safety first. Minusbot provides:
-- **Isolated Filesystems**: Each chat has its own root directory.
-- **Isolated Shells**: Execute Bash, Python, or Node code inside hardened Docker containers.
-- **Resource Limits**: Configurable sandbox constraints to prevent runaway processes.
-
-### 🔐 Secure Vaults & Privacy
-Stop sharing raw API keys with LLMs.
-- **Secret Proxying**: Skills use keys stored in encrypted vaults.
-- **Zero-Exposure**: The LLM interacts with skills handles, never seeing the raw secrets.
-- **Private Telemetry**: Usage statistics are stored locally and never sold or shared.
-
-### 🛠️ Extensible Skill System
-- **LLM Tools**: Native support for Function Calling.
-- **Skills Directory**: Easily install new capabilities (Web Search, Image Gen, Browser Automation).
-- **Docker-native**: Skills run in their own containers for absolute isolation.
-
-### ⏰ Cron & Automation
-- **Scheduled Jobs**: Run commands or AI prompts on a schedule (Cron syntax).
-- **Auto-Maintenance**: System updates and heartbeat monitoring.
-
----
-
-## 🔌 Integrations
-
-Minusbot supports a variety of channels and external services:
-
-### Channels
--   [**Telegram**](docs/channels/telegram.md): Chat with your agent on mobile.
--   [**Discord**](docs/channels/discord.md): Full Discord bot with slash commands.
--   [**Web Dashboard**](docs/channels/web.md): Rich web interface for management and chat.
-
-### External Services
--   [**SerpApi**](docs/integrations/serpapi.md): Google Search capabilities.
--   **More coming soon...**
-
----
-
-## 🚦 Quick Start
-
-### ⚡ Automated Installation (Recommended)
 ```bash
-# Run the global installer
-curl -sSL https://raw.githubusercontent.com/minusbot-org/minusbot/main/install.sh | bash
+# Build the project
+cargo build -p minusd
+
+# Run the CLI
+cargo run -p minusd
 ```
 
-### 🛠️ Manual Setup
-```bash
-# Install dependencies
-bun run install:all
+On first run, minusbot will:
+1. Create a data directory at `~/.local/share/minusbot/` (Linux) or equivalent
+2. Generate a default `config.toml`
+3. Create a `secrets.env` file for API keys
+4. Initialize the SQLite database
+5. Generate a development vault master key
+6. Start the CLI channel
 
-# Install default skills
-bun run skills:install
+## Configuration
 
-# Start development server
-bun run dev
+### Setting up a provider
+
+```
+minusbot> /env set SECRET_OPENROUTER_API_KEY sk-or-v1-...
+minusbot> /providers set-default openrouter
+minusbot> /config set provider.model openai/gpt-4.1-mini
 ```
 
----
+### Available commands
 
-## 🛠️ Tech Stack
-- **Runtime**: [Bun](https://bun.sh) (Ultra-fast JS runtime)
-- **Language**: TypeScript
-- **Frontend**: React + TailwindCSS + Vite
-- **Sandboxing**: Docker Engine
-- **Communication**: WebSockets/Socket.IO
+Type `/help` in the CLI for a full list of commands:
 
-## 📄 License
-MIT © sammwy
+- **Config:** `/config show`, `/config get`, `/config set`
+- **Secrets:** `/env list`, `/env set`, `/env get`, `/env unset`
+- **Vault:** `/vault list`, `/vault put`, `/vault delete`
+- **Providers:** `/providers list`, `/providers set-default`
+- **Skills:** `/skills list`, `/skills load`, `/skills unload`, `/skills search`
+- **Jobs:** `/jobs list`, `/jobs create`, `/jobs cancel`
+- **Debug:** `/tools list`, `/audit tail`
+
+## Architecture
+
+minusbot is a modular monorepo. The core does not depend on concrete implementations:
+
+```
+minus-core          → Shared types, traits
+minus-db            → SQLite persistence
+minus-env           → Config + secrets management
+minus-vault         → Encrypted secrets vault
+minus-policy        → Permission/policy engine
+minus-agent         → Conversation agent loop
+minus-runtime       → Central orchestrator
+minus-scheduler     → Scheduled jobs
+minus-memory        → Memory store (RAG-ready)
+minus-skills        → Markdown knowledge files
+minus-tools         → Built-in tool implementations
+minus-providers     → Provider registry
+minus-provider-*    → Concrete LLM providers
+minus-channels      → Channel registry
+minus-channel-cli   → CLI stdin/stdout channel
+minus-integrations  → Integration registry
+minus-addons        → Addon system
+minus-cli           → Slash command parser
+minus-lua           → Lua scripting (stub)
+minusd              → Main executable
+```
+
+## Data Directory
+
+```
+~/.local/share/minusbot/
+├── config.toml        # Public configuration
+├── secrets.env        # Private API keys
+├── data.sqlite        # SQLite database
+├── skills/            # Markdown skill files
+├── drive/             # Agent-accessible filesystem
+├── vault/secrets/     # Encrypted vault secrets
+├── logs/              # Daily log files
+├── addons/            # Addon directory
+└── cache/             # Cache directory
+```
+
+## Security
+
+- Secrets are never printed in full (always redacted)
+- Secrets are never sent to the LLM
+- All vault access requires declarations and approval
+- Shell execution is denied by default
+- Filesystem writes are restricted to the `drive/` directory
+- All actions pass through the policy engine
+- All changes are audited
+
+## License
+
+MIT

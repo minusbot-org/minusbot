@@ -1,0 +1,9 @@
+[package]
+name = "minus-lua"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+minus-core = { path = "../minus-core" }
+anyhow = { workspace = true }
+tracing = { workspace = true }
