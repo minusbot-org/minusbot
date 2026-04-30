@@ -1,4 +1,4 @@
-use minus_api::traits::{Command, CommandDefinition, CommandContext, MinusDatabase};
+use minus_api::{NotificationKind, traits::{Command, CommandDefinition, CommandContext, MinusDatabase}};
 use anyhow::{Result, Context};
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -47,8 +47,9 @@ impl Command for ChatListCommand {
                 let chat = db.get_chat(id).await?;
                 match chat {
                     Some(c) => {
-                        let mut response = format!("SWITCH_CHAT_ID:{}", c.id);
-                        
+                        // Notify channel about chat switch
+                        ctx.channel.send_notification(&ctx.chat_id, NotificationKind::SwitchChat, &c.id).await?;
+
                         // Attempt to update channel config
                         let provider_id = format!("channel.{}", ctx.channel_id.0);
                         if let Some(channel_config) = ctx.config_registry.get_provider(&provider_id).await {
@@ -57,7 +58,7 @@ impl Command for ChatListCommand {
                             }
                         }
                         
-                        Ok(response)
+                        Ok(format!("Switched to chat: {}", c.title.as_deref().unwrap_or(&c.id)))
                     }
                     None => Ok(format!("Chat '{}' not found.", id)),
                 }
@@ -66,8 +67,12 @@ impl Command for ChatListCommand {
                 let title = if args.len() > 1 { Some(args[1..].join(" ")) } else { None };
                 let chats = db.list_chats().await?;
                 let id = format!("chat-{}", chats.len() + 1);
-                db.ensure_chat(&id, "unix", &id, title.as_deref()).await?;
-                Ok(format!("NEW_CHAT_ID:{}", id))
+                db.ensure_chat(&id, &ctx.channel_id.0, &id, title.as_deref()).await?;
+                
+                // Notify channel about new chat
+                ctx.channel.send_notification(&ctx.chat_id, NotificationKind::NewChat, &id).await?;
+                
+                Ok(format!("Created new chat: {}", title.unwrap_or_else(|| id.clone())))
             }
             "rename" => {
                 if args.len() < 2 {

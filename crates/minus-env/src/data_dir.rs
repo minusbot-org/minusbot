@@ -46,7 +46,7 @@ impl DataDir {
     }
 
     pub fn config_path(&self) -> PathBuf {
-        self.config_dir().join("main.toml")
+        self.root.join("config.toml")
     }
 
     pub fn component_config_path(&self, kind: &str, id: &str) -> PathBuf {
@@ -98,7 +98,7 @@ impl DataDir {
         self.logs_dir().join(format!("{}.log", date))
     }
 
-    /// Check if this is the first run (config.toml doesn't exist yet).
+    /// Check if this is the first run
     pub fn is_first_run(&self) -> bool {
         !self.config_path().exists()
     }

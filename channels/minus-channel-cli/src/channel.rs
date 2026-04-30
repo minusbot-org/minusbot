@@ -126,6 +126,41 @@ impl CliChannel {
 
         Ok(())
     }
+
+    async fn handle_notification(&self, chat_id: &ChatId, meta: &serde_json::Value) -> Result<()> {
+        let n_kind = meta.get("notification_kind").and_then(|k| k.as_str()).unwrap_or("unknown");
+        let data = meta.get("data").and_then(|d| d.as_str()).unwrap_or("");
+
+        match n_kind {
+            "switch_chat" | "new_chat" => {
+                let is_new = n_kind == "new_chat";
+                // Send a marker to the CLI client
+                let marker = format!("NOTIFICATION:{}:{}", n_kind, data);
+                let streams = self.active_streams.lock().await;
+                for (cid, tx) in streams.iter() {
+                    if cid.0 == chat_id.0 {
+                        let _ = tx.send(marker.clone()).await;
+                    }
+                }
+
+                // Automatically request history for the new/switched chat
+                let tx_msg = self.message_tx.clone();
+                let switch_id = data.to_string();
+                tokio::spawn(async move {
+                    let req = IncomingMessage::new(
+                        ChatId(switch_id),
+                        ChannelId("cli".into()),
+                        if is_new { "/chat read 1" } else { "/chat read 10" }
+                    );
+                    let _ = tx_msg.send(req).await;
+                });
+            }
+            _ => {
+                tracing::info!(kind = %n_kind, "Unhandled notification in CLI channel");
+            }
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -246,40 +281,32 @@ impl Channel for CliChannel {
         self.send(out).await
     }
 
+
     async fn send(&self, msg: OutgoingMessage) -> Result<()> {
         // Route to specific handler if kind is specified
         if let Some(meta) = &msg.metadata {
             if let Some(kind) = meta.get("kind").and_then(|k| k.as_str()) {
-                if kind == "warning" {
-                    // msg.content already has "WARNING: " prepended by default send_warning, so we strip it
-                    let raw_msg = msg.content.strip_prefix("WARNING: ").unwrap_or(&msg.content);
-                    return self.send_warning(&msg.chat_id, raw_msg).await;
-                } else if kind == "error" {
-                    let raw_msg = msg.content.strip_prefix("ERROR: ").unwrap_or(&msg.content);
-                    return self.send_error(&msg.chat_id, raw_msg).await;
+                if kind == "notification" {
+                    return self.handle_notification(&msg.chat_id, meta).await;
+                }
+                
+                // Avoid recursion: if it's already formatted, just send it
+                if kind != "formatted" {
+                    if kind == "warning" {
+                        let raw_msg = msg.content.strip_prefix("WARNING: ").unwrap_or(&msg.content);
+                        return self.send_warning(&msg.chat_id, raw_msg).await;
+                    } else if kind == "error" {
+                        let raw_msg = msg.content.strip_prefix("ERROR: ").unwrap_or(&msg.content);
+                        return self.send_error(&msg.chat_id, raw_msg).await;
+                    }
                 }
             }
         }
-        let is_switch = msg.content.starts_with("SWITCH_CHAT_ID:");
+
         let streams = self.active_streams.lock().await;
         for (cid, tx) in streams.iter() {
             if cid.0 == msg.chat_id.0 {
                 let _ = tx.send(msg.content.clone()).await;
-                
-                // If this was a chat switch, automatically request history
-                // so the logic resides in the channel as requested.
-                if is_switch {
-                    let switch_id = msg.content.strip_prefix("SWITCH_CHAT_ID:").unwrap_or(&msg.chat_id.0).to_string();
-                    let tx_msg = self.message_tx.clone();
-                    tokio::spawn(async move {
-                        let req = IncomingMessage::new(
-                            ChatId(switch_id),
-                            ChannelId("cli".into()),
-                            "/chat read 10"
-                        );
-                        let _ = tx_msg.send(req).await;
-                    });
-                }
             }
         }
         Ok(())

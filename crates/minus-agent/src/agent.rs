@@ -15,7 +15,7 @@ use minus_vault::Vault;
 /// The Agent orchestrates the conversation loop:
 /// incoming message → history → skills → tools → provider → response.
 pub struct Agent {
-    db: Database,
+    db: Arc<Database>,
     config: Arc<RwLock<AppConfig>>,
     secrets: Arc<RwLock<SecretsManager>>,
     vault: Option<Arc<Vault>>,
@@ -37,7 +37,7 @@ impl Agent {
         policy: Arc<PolicyEngine>,
     ) -> Self {
         Self {
-            db,
+            db: Arc::new(db),
             config,
             secrets,
             vault,
@@ -271,7 +271,7 @@ impl Agent {
                             chat_id: incoming.chat_id.clone(),
                             channel_id: incoming.channel_id.clone(),
                             component_id: ComponentId::new("agent"),
-                            store: Some(Arc::new(self.db.clone())),
+                            store: Some(self.db.clone() as Arc<dyn std::any::Any + Send + Sync>),
                         };
                         tools_lock.execute(tc.clone(), ctx).await?
                     } else {

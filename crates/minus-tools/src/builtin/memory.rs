@@ -1,94 +1,8 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
 use minus_core::{Tool, ToolCall, ToolContext, ToolDefinition, ToolResult, ToolRisk};
 use minus_db::Database;
 use serde_json::json;
-use std::sync::Arc;
-use uuid::Uuid;
-
-/// Tool: memory.short_save
-pub struct MemoryShortSaveTool;
-
-#[async_trait]
-impl Tool for MemoryShortSaveTool {
-    fn definition(&self) -> ToolDefinition {
-        ToolDefinition {
-            name: "memory_short_save".into(),
-            description: "Save a short fact (max 120 chars) that will always be visible to the assistant.".into(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "id": { "type": "string", "description": "Unique identifier for this fact (e.g. 'user_age')" },
-                    "fact": { "type": "string", "maxLength": 120, "description": "The fact to save" }
-                },
-                "required": ["id", "fact"]
-            }),
-            risk: ToolRisk::Low,
-            side_effect: true,
-        }
-    }
-
-    async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
-        let db = ctx.store.as_ref()
-            .and_then(|s| s.downcast_ref::<Arc<Database>>())
-            .context("Database not found in ToolContext")?;
-        
-        let id = call.arguments["id"].as_str().context("Missing id")?;
-        let fact = call.arguments["fact"].as_str().context("Missing fact")?;
-
-        db.save_memory(id, "short", fact, None).await?;
-
-        Ok(ToolResult {
-            tool_call_id: call.id,
-            name: "memory_short_save".into(),
-            content: format!("Fact '{}' saved to short-term memory.", id),
-            is_error: false,
-        })
-    }
-}
-
-/// Tool: memory.long_save
-pub struct MemoryLongSaveTool;
-
-#[async_trait]
-impl Tool for MemoryLongSaveTool {
-    fn definition(&self) -> ToolDefinition {
-        ToolDefinition {
-            name: "memory_long_save".into(),
-            description: "Save a detailed long-term memory. Provide a brief summary (brief) and the full content.".into(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "id": { "type": "string", "description": "Unique ID for this memory (optional, will generate Uuid if not provided)" },
-                    "brief": { "type": "string", "description": "A short summary visible in the system prompt" },
-                    "content": { "type": "string", "description": "The full detailed content" }
-                },
-                "required": ["brief", "content"]
-            }),
-            risk: ToolRisk::Low,
-            side_effect: true,
-        }
-    }
-
-    async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
-        let db = ctx.store.as_ref()
-            .and_then(|s| s.downcast_ref::<Arc<Database>>())
-            .context("Database not found in ToolContext")?;
-        
-        let id = call.arguments["id"].as_str().map(|s| s.to_string()).unwrap_or_else(|| Uuid::new_v4().to_string());
-        let brief = call.arguments["brief"].as_str().context("Missing brief")?;
-        let content = call.arguments["content"].as_str().context("Missing content")?;
-
-        db.save_memory(&id, "long", brief, Some(content)).await?;
-
-        Ok(ToolResult {
-            tool_call_id: call.id,
-            name: "memory_long_save".into(),
-            content: format!("Long-term memory '{}' saved.", id),
-            is_error: false,
-        })
-    }
-}
 
 /// Tool: memory.search
 pub struct MemorySearchTool;
@@ -117,7 +31,7 @@ impl Tool for MemorySearchTool {
 
     async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
         let db = ctx.store.as_ref()
-            .and_then(|s| s.downcast_ref::<Arc<Database>>())
+            .and_then(|s| s.downcast_ref::<Database>())
             .context("Database not found in ToolContext")?;
         
         let terms: Vec<String> = call.arguments["terms"].as_array()
@@ -153,18 +67,18 @@ impl Tool for MemoryManageTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
             name: "memory_manage".into(),
-            description: "Update, append to, or delete a memory.".into(),
+            description: "Save, update, append to, or delete a memory. Use 'save' for new entries (with optional brief).".into(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "id": { "type": "string", "description": "The ID of the memory to manage" },
+                    "id": { "type": "string", "description": "Unique identifier for the memory entry" },
                     "action": { 
                         "type": "string", 
-                        "enum": ["replace", "append", "delete"],
+                        "enum": ["save", "replace", "append", "delete"],
                         "description": "What to do with the memory"
                     },
-                    "brief": { "type": "string", "description": "New brief summary (optional)" },
-                    "content": { "type": "string", "description": "New content or content to append (optional)" }
+                    "content": { "type": "string", "description": "The information to store or append." },
+                    "brief": { "type": "string", "description": "A short summary. Optional for 'save' if content < 128 chars." }
                 },
                 "required": ["id", "action"]
             }),
@@ -175,13 +89,34 @@ impl Tool for MemoryManageTool {
 
     async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
         let db = ctx.store.as_ref()
-            .and_then(|s| s.downcast_ref::<Arc<Database>>())
+            .and_then(|s| s.downcast_ref::<Database>())
             .context("Database not found in ToolContext")?;
         
         let id = call.arguments["id"].as_str().context("Missing id")?;
         let action = call.arguments["action"].as_str().context("Missing action")?;
 
         match action {
+            "save" => {
+                let content = call.arguments["content"].as_str().context("Missing content for save")?;
+                let brief = call.arguments["brief"].as_str();
+
+                let (kind, final_brief, final_content) = match brief {
+                    Some(b) => ("long", b, Some(content)),
+                    None => {
+                        if content.len() >= 128 {
+                            bail!("Content is too long (>= 128 chars). Please provide a 'brief' summary.");
+                        }
+                        ("short", content, None)
+                    }
+                };
+                db.save_memory(id, kind, final_brief, final_content).await?;
+                Ok(ToolResult {
+                    tool_call_id: call.id,
+                    name: "memory_manage".into(),
+                    content: format!("Memory '{}' saved successfully as {}.", id, kind),
+                    is_error: false,
+                })
+            }
             "delete" => {
                 if db.delete_memory(id).await? {
                     Ok(ToolResult {
@@ -238,5 +173,3 @@ impl Tool for MemoryManageTool {
         }
     }
 }
-
-use anyhow::Context;

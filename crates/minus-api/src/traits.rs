@@ -39,6 +39,16 @@ pub trait Channel: Send + Sync {
         self.send(out).await
     }
 
+    async fn send_notification(&self, chat_id: &ChatId, kind: NotificationKind, data: &str) -> Result<()> {
+        let mut out = OutgoingMessage::new(chat_id.clone(), "");
+        out.metadata = Some(serde_json::json!({
+            "kind": "notification",
+            "notification_kind": kind,
+            "data": data
+        }));
+        self.send(out).await
+    }
+
     fn config(&self) -> Option<Arc<dyn ConfigProvider>> {
         None
     }
@@ -154,7 +164,7 @@ pub trait MinusDatabase: Send + Sync {
     // Chat management
     async fn list_chats(&self) -> Result<Vec<Chat>>;
     async fn get_chat(&self, id: &str) -> Result<Option<Chat>>;
-    async fn ensure_chat(&self, id: &str, channel_type: &str, channel_id: &str, title: Option<&str>) -> Result<()>;
+    async fn ensure_chat(&self, id: &str, channel_id: &str, external_id: &str, title: Option<&str>) -> Result<()>;
     async fn rename_chat(&self, id: &str, title: &str) -> Result<()>;
     async fn delete_chat(&self, id: &str) -> Result<()>;
 

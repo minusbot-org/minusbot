@@ -1,28 +1,28 @@
 [workspace]
 resolver = "2"
 members = [
+    "apps/minusc",
+    "apps/minusd",
+    "crates/minus-addons",
+    "crates/minus-agent",
+    "crates/minus-channels",
+    "crates/minus-commands",
     "crates/minus-core",
     "crates/minus-db",
     "crates/minus-env",
-    "crates/minus-vault",
-    "crates/minus-policy",
-    "crates/minus-scheduler",
+    "crates/minus-integrations",
+    "crates/minus-lua",
     "crates/minus-memory",
+    "crates/minus-policy",
+    "crates/minus-providers",
+    "crates/minus-runtime",
+    "crates/minus-scheduler",
     "crates/minus-skills",
     "crates/minus-tools",
-    "crates/minus-providers",
-    "crates/minus-agent",
-    "crates/minus-runtime",
+    "crates/minus-vault",
+    "channels/minus-channel-cli",
     "providers/minus-provider-openai",
     "providers/minus-provider-openrouter",
-    "crates/minus-channels",
-    "channels/minus-channel-cli",
-    "crates/minus-integrations",
-    "crates/minus-addons",
-    "crates/minus-lua",
-    "crates/minus-commands",
-    "apps/minusd",
-    "apps/minusc",
 ]
 
 [workspace.dependencies]
@@ -34,7 +34,13 @@ thiserror = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
-sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite", "chrono", "uuid", "macros"] }
+sqlx = { version = "0.7", features = [
+    "runtime-tokio",
+    "sqlite",
+    "chrono",
+    "uuid",
+    "macros",
+] }
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.4", features = ["v4", "serde"] }
 toml = "0.8"

@@ -42,8 +42,6 @@ impl Tool for TimeNowTool {
 pub fn all_builtin_tools() -> Vec<Box<dyn Tool>> {
     vec![
         Box::new(TimeNowTool),
-        Box::new(MemoryShortSaveTool),
-        Box::new(MemoryLongSaveTool),
         Box::new(MemorySearchTool),
         Box::new(MemoryManageTool),
         Box::new(ChatListTool),

@@ -73,28 +73,6 @@ async fn main() -> Result<()> {
     }
     let config = Arc::new(RwLock::new(config_raw.clone()));
 
-    // Print startup banner
-    {
-        let provider_display = config_raw.provider.default.as_deref().unwrap_or("(none)");
-        let model_display = config_raw.provider.text_model.as_deref().unwrap_or("(none)");
-
-        eprintln!();
-        eprintln!("\x1b[35m      ██    ██    \x1b[0m");
-        eprintln!("\x1b[35m      ██    ██    \x1b[0m");
-        eprintln!("\x1b[35m     ██████████   \x1b[0m");
-        eprintln!("\x1b[35m    ███ ████ ███  \x1b[0m  \x1b[1;36mMinusbot v{}\x1b[0m", VERSION);
-        eprintln!("\x1b[35m     ██████████   \x1b[0m  A self-hosted personal AI assistant");
-        eprintln!("\x1b[35m       ██████     \x1b[0m");
-        eprintln!("\x1b[35m      ███████     \x1b[0m");
-        eprintln!("\x1b[35m       ██  ██     \x1b[0m");
-        eprintln!();
-        
-        eprintln!("  \x1b[36mData dir\x1b[0m   -> \x1b[32m{}\x1b[0m", data_dir.root.display());
-        eprintln!("  \x1b[36mDatabase\x1b[0m   -> \x1b[32m{}\x1b[0m", data_dir.database_url());
-        eprintln!("  \x1b[36mProvider\x1b[0m   -> \x1b[33m{}\x1b[0m", provider_display);
-        eprintln!("  \x1b[36mModel\x1b[0m      -> \x1b[33m{}\x1b[0m", model_display);
-        eprintln!();
-    }
 
     // 4. Load secrets
     let _secrets_raw = SecretsManager::load(&data_dir.secrets_env_path())?;
@@ -140,9 +118,46 @@ async fn main() -> Result<()> {
         if let Some(default_id) = &cfg.provider.default {
             let _ = provider_reg.set_default(default_id);
         }
-        if let Some(model) = &cfg.provider.text_model {
-            provider_reg.set_default_model(model);
+
+        // Try to load model from the default provider's own config first
+        let mut loaded_model = None;
+        if let Some(p) = provider_reg.default_provider() {
+            if let Some(cp) = p.config() {
+                if let Ok(Some(model)) = cp.read_config("text_model").await {
+                    loaded_model = Some(model);
+                }
+            }
         }
+
+        // Fallback to main config if not found in provider config
+        if loaded_model.is_none() {
+            loaded_model = cfg.provider.text_model.clone();
+        }
+
+        if let Some(model) = loaded_model {
+            provider_reg.set_default_model(&model);
+        }
+
+        // Print startup banner now that we have provider and model
+        let provider_display = provider_reg.default_id().unwrap_or("(none)");
+        let model_display = provider_reg.default_model().unwrap_or("(none)");
+
+        eprintln!();
+        eprintln!("\x1b[35m      ██    ██    \x1b[0m");
+        eprintln!("\x1b[35m      ██    ██    \x1b[0m");
+        eprintln!("\x1b[35m     ██████████   \x1b[0m");
+        eprintln!("\x1b[35m    ███ ████ ███  \x1b[0m  \x1b[1;36mMinusbot v{}\x1b[0m", VERSION);
+        eprintln!("\x1b[35m     ██████████   \x1b[0m  A self-hosted personal AI assistant");
+        eprintln!("\x1b[35m       ██████     \x1b[0m");
+        eprintln!("\x1b[35m      ███████     \x1b[0m");
+        eprintln!("\x1b[35m       ██  ██     \x1b[0m");
+        eprintln!();
+        
+        eprintln!("  \x1b[36mData dir\x1b[0m   -> \x1b[32m{}\x1b[0m", data_dir.root.display());
+        eprintln!("  \x1b[36mDatabase\x1b[0m   -> \x1b[32m{}\x1b[0m", data_dir.database_url());
+        eprintln!("  \x1b[36mProvider\x1b[0m   -> \x1b[33m{}\x1b[0m", provider_display);
+        eprintln!("  \x1b[36mModel\x1b[0m      -> \x1b[33m{}\x1b[0m", model_display);
+        eprintln!();
     }
     let providers = Arc::new(RwLock::new(provider_reg));
 

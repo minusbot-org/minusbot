@@ -3,7 +3,6 @@ use async_trait::async_trait;
 use minus_core::{Tool, ToolCall, ToolContext, ToolDefinition, ToolResult, ToolRisk};
 use minus_db::Database;
 use serde_json::json;
-use std::sync::Arc;
 
 /// Tool: chat.list
 pub struct ChatListTool;
@@ -26,7 +25,7 @@ impl Tool for ChatListTool {
 
     async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
         let db = ctx.store.as_ref()
-            .and_then(|s| s.downcast_ref::<Arc<Database>>())
+            .and_then(|s| s.downcast_ref::<Database>())
             .context("Database not found in ToolContext")?;
         
         let chats = db.list_chats().await?;
@@ -72,7 +71,7 @@ impl Tool for ChatReadTool {
 
     async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
         let db = ctx.store.as_ref()
-            .and_then(|s| s.downcast_ref::<Arc<Database>>())
+            .and_then(|s| s.downcast_ref::<Database>())
             .context("Database not found in ToolContext")?;
         
         let chat_id = call.arguments["chat_id"].as_str().context("Missing chat_id")?;
@@ -125,7 +124,7 @@ impl Tool for ChatSearchTool {
 
     async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
         let db = ctx.store.as_ref()
-            .and_then(|s| s.downcast_ref::<Arc<Database>>())
+            .and_then(|s| s.downcast_ref::<Database>())
             .context("Database not found in ToolContext")?;
         
         let terms: Vec<String> = call.arguments["terms"].as_array()

@@ -136,8 +136,21 @@ async fn main() -> Result<()> {
     {
         let config_raw = minus_env::AppConfig::load(&data_dir.config_path()).unwrap_or_default();
         let provider_display = config_raw.provider.default.as_deref().unwrap_or("(none)");
-        let model_display = config_raw.provider.text_model.as_deref().unwrap_or("(none)");
-        let version = "0.1.0"; // Should probably come from a central place but fine for now
+        
+        let mut model_display = config_raw.provider.text_model.clone().unwrap_or_else(|| "(none)".into());
+        if let Some(id) = &config_raw.provider.default {
+            let provider_cfg_path = data_dir.component_config_path("provider", id);
+            if provider_cfg_path.exists() {
+                if let Ok(content) = std::fs::read_to_string(&provider_cfg_path) {
+                    if let Ok(val) = toml::from_str::<toml::Value>(&content) {
+                        if let Some(m) = val.get("text_model").and_then(|v| v.as_str()) {
+                            model_display = m.to_string();
+                        }
+                    }
+                }
+            }
+        }
+        let version = "0.1.0";
 
         let proto_str = match protocol {
             #[cfg(unix)]
@@ -195,19 +208,19 @@ async fn main() -> Result<()> {
         let mut printer = printer;
         let mut lines = BufReader::new(reader).lines();
         while let Ok(Some(line)) = lines.next_line().await {
-            // Handle special commands from server
-            if line.starts_with("SWITCH_CHAT_ID:") {
-                let new_id = line.strip_prefix("SWITCH_CHAT_ID:").unwrap();
+            // Handle notifications from server
+            if line.starts_with("NOTIFICATION:switch_chat:") {
+                let new_id = line.strip_prefix("NOTIFICATION:switch_chat:").unwrap();
                 let mut s = state_clone.lock().unwrap();
                 s.current_chat_id = new_id.to_string();
-                let _ = printer.print(format!("{} {}", "Switched to chat:".green(), new_id.bold()));
+                let _ = printer.print(format!("\n\x1b[1;33m[SYSTEM]\x1b[0m Switched to chat: \x1b[1;32m{}\x1b[0m\n", new_id));
                 continue;
             }
-            if line.starts_with("NEW_CHAT_ID:") {
-                let new_id = line.strip_prefix("NEW_CHAT_ID:").unwrap();
+            if line.starts_with("NOTIFICATION:new_chat:") {
+                let new_id = line.strip_prefix("NOTIFICATION:new_chat:").unwrap();
                 let mut s = state_clone.lock().unwrap();
                 s.current_chat_id = new_id.to_string();
-                let _ = printer.print(format!("{} {}", "Created and switched to:".green(), new_id.bold()));
+                let _ = printer.print(format!("\n\x1b[1;33m[SYSTEM]\x1b[0m Created and switched to: \x1b[1;32m{}\x1b[0m\n", new_id));
                 continue;
             }
 

@@ -134,6 +134,13 @@ pub struct OutgoingMessage {
     pub metadata: Option<serde_json::Value>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NotificationKind {
+    SwitchChat,
+    NewChat,
+}
+
 impl OutgoingMessage {
     pub fn new(chat_id: ChatId, content: impl Into<String>) -> Self {
         Self {

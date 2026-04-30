@@ -159,11 +159,11 @@ impl minus_api::traits::MinusDatabase for Runtime {
     async fn ensure_chat(
         &self,
         id: &str,
-        channel_type: &str,
         channel_id: &str,
+        external_id: &str,
         title: Option<&str>,
     ) -> Result<()> {
-        minus_api::traits::MinusDatabase::ensure_chat(&self.db, id, channel_type, channel_id, title)
+        minus_api::traits::MinusDatabase::ensure_chat(&self.db, id, channel_id, external_id, title)
             .await
     }
     async fn rename_chat(&self, id: &str, title: &str) -> Result<()> {

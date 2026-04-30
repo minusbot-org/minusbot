@@ -88,8 +88,8 @@ impl minus_api::traits::MinusDatabase for Database {
             updated_at: r.updated_at,
         }))
     }
-    async fn ensure_chat(&self, id: &str, channel_type: &str, channel_id: &str, title: Option<&str>) -> Result<()> {
-        let _ = self.ensure_chat(id, channel_type, channel_id, title).await?;
+    async fn ensure_chat(&self, id: &str, channel_id: &str, external_id: &str, title: Option<&str>) -> Result<()> {
+        let _ = self.ensure_chat(id, channel_id, external_id, title).await?;
         Ok(())
     }
     async fn rename_chat(&self, id: &str, title: &str) -> Result<()> {

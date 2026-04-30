@@ -13,3 +13,4 @@ rustyline = "12.0"
 colored = "2.1"
 serde = { workspace = true }
 serde_json = { workspace = true }
+toml = { workspace = true }
