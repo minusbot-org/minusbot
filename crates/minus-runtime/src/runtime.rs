@@ -1,6 +1,5 @@
 use anyhow::Result;
 use minus_agent::Agent;
-use minus_api::traits::MinusDatabase;
 use minus_core::*;
 use minus_db::Database;
 use minus_env::{AppConfig, SecretsManager};

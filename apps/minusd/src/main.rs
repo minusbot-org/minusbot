@@ -52,7 +52,8 @@ async fn main() -> Result<()> {
     tracing::info!("Starting minusbot v{} (debug: {})", VERSION, debug_mode);
     
     // Instance lock check
-    let _socket_path = data_dir.root.join("minusd.sock");
+    #[cfg(unix)]
+    let socket_path = data_dir.root.join("minusd.sock");
     #[cfg(unix)]
     if socket_path.exists() {
         if tokio::net::UnixStream::connect(&socket_path).await.is_ok() {

@@ -2,12 +2,14 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use minus_core::*;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::net::SocketAddr;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 #[cfg(unix)]
-use tokio::net::{UnixListener, UnixStream};
+use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
+#[cfg(unix)]
+use tokio::net::UnixListener;
 use tokio::sync::{mpsc, Mutex};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -36,7 +38,7 @@ impl CliChannel {
     pub fn new(message_tx: mpsc::Sender<IncomingMessage>, config_dir: std::path::PathBuf) -> Self {
         let config_path = config_dir.join("channel-cli.toml");
         let config = Arc::new(FileConfigProvider::new("channel.cli", config_path));
-        
+
         Self {
             message_tx,
             active_streams: Arc::new(Mutex::new(Vec::new())),
@@ -66,7 +68,7 @@ impl CliChannel {
         }
 
         let active_streams_inner = active_streams.clone();
-        
+
         // Spawn a task to send responses back to the client
         tokio::spawn(async move {
             while let Some(msg) = resp_rx.recv().await {
@@ -103,8 +105,9 @@ impl CliChannel {
             if req.chat_id != current_chat_id.0 {
                 let mut streams = active_streams_inner.lock().await;
                 // Remove old registration
-                streams.retain(|(cid, tx)| !(cid.0 == current_chat_id.0 && tx.same_channel(&resp_tx)));
-                
+                streams
+                    .retain(|(cid, tx)| !(cid.0 == current_chat_id.0 && tx.same_channel(&resp_tx)));
+
                 current_chat_id = ChatId(req.chat_id.clone());
                 // Add new registration
                 streams.push((current_chat_id.clone(), resp_tx.clone()));
@@ -128,7 +131,10 @@ impl CliChannel {
     }
 
     async fn handle_notification(&self, chat_id: &ChatId, meta: &serde_json::Value) -> Result<()> {
-        let n_kind = meta.get("notification_kind").and_then(|k| k.as_str()).unwrap_or("unknown");
+        let n_kind = meta
+            .get("notification_kind")
+            .and_then(|k| k.as_str())
+            .unwrap_or("unknown");
         let data = meta.get("data").and_then(|d| d.as_str()).unwrap_or("");
 
         match n_kind {
@@ -150,7 +156,11 @@ impl CliChannel {
                     let req = IncomingMessage::new(
                         ChatId(switch_id),
                         ChannelId("cli".into()),
-                        if is_new { "/chat read 1" } else { "/chat read 10" }
+                        if is_new {
+                            "/chat read 1"
+                        } else {
+                            "/chat read 10"
+                        },
                     );
                     let _ = tx_msg.send(req).await;
                 });
@@ -178,16 +188,19 @@ impl Channel for CliChannel {
         let active_streams = self.active_streams.clone();
 
         let is_windows = cfg!(target_os = "windows");
-        
+
         // Default values
-        let (protocol, secret) = if is_windows {
+        let (protocol, secret): (CliProtocol, Option<String>) = if is_windows {
             let port = 10000;
             let addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
             let pass_file = ctx.config_dir.parent().unwrap().join(".tcp_socket_passwd");
             let sec = if pass_file.exists() {
-                std::fs::read_to_string(&pass_file).unwrap_or_default().trim().to_string()
+                std::fs::read_to_string(&pass_file)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string()
             } else {
-                use rand::{Rng, distributions::Alphanumeric};
+                use rand::{distributions::Alphanumeric, Rng};
                 let s: String = rand::thread_rng()
                     .sample_iter(&Alphanumeric)
                     .take(32)
@@ -213,16 +226,17 @@ impl Channel for CliChannel {
             #[cfg(unix)]
             CliProtocol::Unix(socket_path) => {
                 if socket_path.exists() {
-                    std::fs::remove_file(socket_path)?;
+                    std::fs::remove_file(&socket_path)?;
                 }
 
                 if let Some(parent) = socket_path.parent() {
                     std::fs::create_dir_all(parent)?;
                 }
 
-                let listener = UnixListener::bind(socket_path)
-                    .with_context(|| format!("Failed to bind to unix socket: {}", socket_path.display()))?;
-                
+                let listener = UnixListener::bind(&socket_path).with_context(|| {
+                    format!("Failed to bind to unix socket: {}", socket_path.display())
+                })?;
+
                 tracing::info!(path = %socket_path.display(), "Unix CLI channel listening");
 
                 loop {
@@ -245,7 +259,7 @@ impl Channel for CliChannel {
                 let listener = TcpListener::bind(addr)
                     .await
                     .with_context(|| format!("Failed to bind to TCP socket: {}", addr))?;
-                
+
                 tracing::info!(addr = %addr, "TCP CLI channel listening");
 
                 loop {
@@ -281,7 +295,6 @@ impl Channel for CliChannel {
         self.send(out).await
     }
 
-
     async fn send(&self, msg: OutgoingMessage) -> Result<()> {
         // Route to specific handler if kind is specified
         if let Some(meta) = &msg.metadata {
@@ -289,11 +302,14 @@ impl Channel for CliChannel {
                 if kind == "notification" {
                     return self.handle_notification(&msg.chat_id, meta).await;
                 }
-                
+
                 // Avoid recursion: if it's already formatted, just send it
                 if kind != "formatted" {
                     if kind == "warning" {
-                        let raw_msg = msg.content.strip_prefix("WARNING: ").unwrap_or(&msg.content);
+                        let raw_msg = msg
+                            .content
+                            .strip_prefix("WARNING: ")
+                            .unwrap_or(&msg.content);
                         return self.send_warning(&msg.chat_id, raw_msg).await;
                     } else if kind == "error" {
                         let raw_msg = msg.content.strip_prefix("ERROR: ").unwrap_or(&msg.content);

@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use minus_core::*;
 use minus_db::Database;
 use minus_env::{AppConfig, SecretsManager};

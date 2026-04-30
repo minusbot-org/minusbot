@@ -3,7 +3,7 @@ use minus_env::DataDir;
 use rustyline::error::ReadlineError;
 
 use rustyline::ExternalPrinter;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use colored::*;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
@@ -91,24 +91,35 @@ async fn main() -> Result<()> {
         None
     };
 
-    let (reader, mut writer) = match protocol {
+    let (reader, mut writer): (
+        Box<dyn AsyncRead + Unpin + Send>,
+        Box<dyn AsyncWrite + Unpin + Send>,
+    ) = match protocol {
         #[cfg(unix)]
         Protocol::Unix => {
             let socket_path = data_dir.root.join("minusd.sock");
             if !socket_path.exists() {
-                eprintln!("{}", "Error: minusbot daemon is not running (socket missing).".red());
+                eprintln!(
+                    "{}",
+                    "Error: minusbot daemon is not running (socket missing).".red()
+                );
                 std::process::exit(1);
             }
             let stream = match tokio::net::UnixStream::connect(&socket_path).await {
                 Ok(s) => s,
                 Err(e) => {
-                    eprintln!("{} Failed to connect to {}", "Error:".red().bold(), socket_path.display());
+                    eprintln!(
+                        "{} Failed to connect to {}",
+                        "Error:".red().bold(),
+                        socket_path.display()
+                    );
                     eprintln!("{} Is the minusd daemon running?", "Hint:".yellow().bold());
                     eprintln!("\nCaused by:\n    {}", e);
                     std::process::exit(1);
                 }
             };
-            tokio::io::split(stream)
+            let (r, w) = tokio::io::split(stream);
+            (Box::new(r), Box::new(w))
         }
         Protocol::Tcp => {
             let addr = SocketAddr::from_str(&host).unwrap_or_else(|_| {
@@ -119,12 +130,16 @@ async fn main() -> Result<()> {
                 Ok(s) => s,
                 Err(e) => {
                     eprintln!("{} Failed to connect to TCP {}", "Error:".red().bold(), addr);
-                    eprintln!("{} Is the minusd daemon running on that port?", "Hint:".yellow().bold());
+                    eprintln!(
+                        "{} Is the minusd daemon running on that port?",
+                        "Hint:".yellow().bold()
+                    );
                     eprintln!("\nCaused by:\n    {}", e);
                     std::process::exit(1);
                 }
             };
-            tokio::io::split(stream)
+            let (r, w) = tokio::io::split(stream);
+            (Box::new(r), Box::new(w))
         }
     };
 

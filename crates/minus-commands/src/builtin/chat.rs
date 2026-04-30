@@ -1,7 +1,6 @@
-use minus_api::{NotificationKind, traits::{Command, CommandDefinition, CommandContext, MinusDatabase}};
-use anyhow::{Result, Context};
+use minus_api::{NotificationKind, traits::{Command, CommandDefinition, CommandContext}};
+use anyhow::Result;
 use async_trait::async_trait;
-use std::sync::Arc;
 
 pub struct ChatListCommand;
 
