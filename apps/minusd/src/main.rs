@@ -231,6 +231,7 @@ async fn main() -> Result<()> {
         agent,
         commands,
         config_providers: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+        channels: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         shutdown_tx: shutdown_tx.clone(),
     });
 
@@ -241,17 +242,20 @@ async fn main() -> Result<()> {
     let config_dir = data_dir.root.join("config");
     let cli_channel = Arc::new(CliChannel::new(msg_tx, config_dir.clone(), db.clone()));
     
-    // Register as config provider
+    // Register as config provider and in channel registry
     runtime.register(cli_channel.clone()).await;
+    {
+        let mut channels = runtime.channels.write().await;
+        channels.insert(minus_core::Channel::id(cli_channel.as_ref()).to_string(), cli_channel.clone());
+    }
 
     // Spawn CLI listener
     let chan = cli_channel.clone();
-
+    let ctx = ChannelContext {
+        channel_id: ChannelId(minus_core::Channel::id(chan.as_ref()).to_string()),
+        config_dir: data_dir.config_dir(),
+    };
     let chan_handle = tokio::spawn(async move {
-        let ctx = ChannelContext {
-            channel_id: ChannelId("cli".into()),
-            config_dir,
-        };
         if let Err(e) = chan.start(ctx).await {
             tracing::error!(error = %e, "CLI channel error");
         }

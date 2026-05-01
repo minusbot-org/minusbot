@@ -9,6 +9,7 @@ pub mod apikey;
 pub mod tools;
 pub mod memory;
 pub mod scheduler;
+pub mod channels;
 
 use crate::registry::CommandRegistry;
 use std::sync::Arc;
@@ -26,4 +27,5 @@ pub fn register_all(reg: &mut CommandRegistry) {
     reg.register(Arc::new(tools::ToolsCommand));
     reg.register(Arc::new(memory::MemoryCommand));
     reg.register(Arc::new(scheduler::SchedulerCommand));
+    reg.register(Arc::new(channels::ChannelsCommand));
 }

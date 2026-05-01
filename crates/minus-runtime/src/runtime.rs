@@ -29,6 +29,7 @@ pub struct Runtime {
     pub agent: Arc<Agent>,
     pub commands: Arc<RwLock<minus_commands::CommandRegistry>>,
     pub config_providers: Arc<RwLock<std::collections::HashMap<String, Arc<dyn ConfigProvider>>>>,
+    pub channels: Arc<RwLock<std::collections::HashMap<String, Arc<dyn Channel>>>>,
     pub shutdown_tx: tokio::sync::broadcast::Sender<()>,
 }
 
@@ -52,6 +53,7 @@ impl Runtime {
                 secrets: runtime.clone(),
                 providers: runtime.clone(),
                 scheduler: runtime.clone(),
+                channels: runtime.clone(),
                 shutdown_trigger: None, // TODO: Connect to shutdown_tx
                 all_commands: registry.list(),
             };
@@ -134,6 +136,34 @@ impl minus_api::traits::MinusScheduler for Runtime {
 
     async fn delete_task(&self, id: &str) -> Result<bool> {
         minus_api::traits::MinusScheduler::delete_task(self.scheduler.as_ref(), id).await
+    }
+}
+
+#[minus_api::async_trait]
+impl minus_api::traits::MinusChannels for Runtime {
+    async fn list_channels(&self) -> Vec<ChannelStatus> {
+        let channels = self.channels.read().await;
+        let mut statuses = Vec::new();
+        for chan in channels.values() {
+            statuses.push(ChannelStatus {
+                id: chan.id().to_string(),
+                name: chan.name().to_string(),
+                is_enabled: chan.is_enabled(),
+                is_ready: chan.is_ready().await,
+                active_chat_id: chan.get_active_chat().await,
+            });
+        }
+        statuses
+    }
+
+    async fn get_channel(&self, id: &str) -> Option<Arc<dyn Channel>> {
+        let channels = self.channels.read().await;
+        channels.get(id).cloned()
+    }
+
+    async fn set_channel_enabled(&self, id: &str, enabled: bool) -> Result<bool> {
+        let chan = self.get_channel(id).await.ok_or_else(|| anyhow::anyhow!("Channel not found"))?;
+        chan.set_enabled(enabled).await
     }
 }
 

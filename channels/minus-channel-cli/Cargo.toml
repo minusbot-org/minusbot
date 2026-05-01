@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+minus-api = { version = "0.1.0", path = "../../crates/minus-api" }
 minus-core = { path = "../../crates/minus-core" }
 minus-db = { path = "../../crates/minus-db" }
 anyhow = { workspace = true }
@@ -14,5 +15,6 @@ serde_json = { workspace = true }
 tracing = { workspace = true }
 futures = "0.3"
 rand.workspace = true
+chrono.workspace = true
+uuid.workspace = true
 toml.workspace = true
-minus-api = { version = "0.1.0", path = "../../crates/minus-api" }

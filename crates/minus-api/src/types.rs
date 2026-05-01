@@ -407,3 +407,20 @@ pub struct SchedulerTask {
     pub next_run: Option<DateTime<Utc>>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandFeedback {
+    pub chat_id: ChatId,
+    pub command: String,
+    pub result: String,
+    pub is_error: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChannelStatus {
+    pub id: String,
+    pub name: String,
+    pub is_enabled: bool,
+    pub is_ready: bool,
+    pub active_chat_id: Option<ChatId>,
+}
+

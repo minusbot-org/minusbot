@@ -10,6 +10,15 @@ pub trait Channel: Send + Sync {
     fn id(&self) -> &'static str;
     fn name(&self) -> &'static str;
     
+    // Status
+    fn is_enabled(&self) -> bool;
+    async fn set_enabled(&self, flag: bool) -> Result<bool>; // Returns true if state changed
+    async fn is_ready(&self) -> bool;
+    
+    // Chat context
+    async fn get_active_chat(&self) -> Option<ChatId>;
+    async fn set_active_chat(&self, chat_id: ChatId) -> Result<()>;
+
     // Lifecycle
     async fn start(&self, ctx: ChannelContext) -> Result<()>;
     async fn stop(&self) -> Result<()> { Ok(()) }
@@ -18,6 +27,7 @@ pub trait Channel: Send + Sync {
     async fn send_message(&self, packet: MessagePacket) -> Result<()>;
     async fn send_notification(&self, packet: NotificationPacket) -> Result<()>;
     async fn send_tool_call(&self, packet: ToolCallPacket) -> Result<()>;
+    async fn send_command_feedback(&self, feedback: CommandFeedback) -> Result<()>;
     
     // Platform features
     async fn register_commands(&self, _commands: Vec<CommandDefinition>) -> Result<()> { Ok(()) }
@@ -94,6 +104,7 @@ pub trait ConfigProvider: Send + Sync {
     async fn set_config(&self, key: &str, value: &str) -> Result<()>;
 }
 
+#[derive(Clone, Debug)]
 pub struct ChannelContext {
     pub channel_id: ChannelId,
     pub config_dir: std::path::PathBuf,
@@ -121,8 +132,16 @@ pub struct CommandContext {
     pub secrets: Arc<dyn MinusSecrets>,
     pub providers: Arc<dyn MinusProviders>,
     pub scheduler: Arc<dyn MinusScheduler>,
+    pub channels: Arc<dyn MinusChannels>,
     pub shutdown_trigger: Option<tokio::sync::mpsc::Sender<()>>,
     pub all_commands: Vec<CommandDefinition>,
+}
+
+#[async_trait]
+pub trait MinusChannels: Send + Sync {
+    async fn list_channels(&self) -> Vec<ChannelStatus>;
+    async fn get_channel(&self, id: &str) -> Option<Arc<dyn Channel>>;
+    async fn set_channel_enabled(&self, id: &str, enabled: bool) -> Result<bool>;
 }
 
 #[async_trait]

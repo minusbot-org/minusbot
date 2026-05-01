@@ -10,7 +10,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 #[cfg(unix)]
 use tokio::net::UnixListener;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, Mutex, RwLock};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CliRequest {
@@ -45,6 +45,9 @@ pub struct CliChannel {
     active_streams: Arc<Mutex<Vec<(ChatId, mpsc::Sender<String>)>>>,
     config: Arc<dyn ConfigProvider>,
     db: minus_db::Database,
+    enabled: Arc<std::sync::atomic::AtomicBool>,
+    active_chat_id: Arc<RwLock<Option<ChatId>>>,
+    context: Arc<RwLock<Option<ChannelContext>>>,
 }
 
 impl CliChannel {
@@ -61,6 +64,9 @@ impl CliChannel {
             active_streams: Arc::new(Mutex::new(Vec::new())),
             config,
             db,
+            enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            active_chat_id: Arc::new(RwLock::new(Some(ChatId("cli:default".into())))),
+            context: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -161,16 +167,45 @@ impl CliChannel {
 }
 
 #[async_trait]
+#[async_trait]
 impl Channel for CliChannel {
-    fn id(&self) -> &'static str {
-        "cli"
+    fn id(&self) -> &'static str { "cli" }
+    fn name(&self) -> &'static str { "CLI Channel" }
+
+    fn is_enabled(&self) -> bool {
+        self.enabled.load(std::sync::atomic::Ordering::Relaxed)
     }
 
-    fn name(&self) -> &'static str {
-        "CLI Channel"
+    async fn set_enabled(&self, flag: bool) -> Result<bool> {
+        let old = self.enabled.swap(flag, std::sync::atomic::Ordering::Relaxed);
+        if old != flag {
+            // Lifecycle handled by main.rs loop
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    async fn is_ready(&self) -> bool {
+        true
+    }
+
+    async fn get_active_chat(&self) -> Option<ChatId> {
+        self.active_chat_id.read().await.clone()
+    }
+
+    async fn set_active_chat(&self, chat_id: ChatId) -> Result<()> {
+        let mut active = self.active_chat_id.write().await;
+        *active = Some(chat_id);
+        Ok(())
     }
 
     async fn start(&self, ctx: ChannelContext) -> Result<()> {
+        {
+            let mut context = self.context.write().await;
+            *context = Some(ctx.clone());
+        }
+
         let message_tx = self.message_tx.clone();
         let active_streams = self.active_streams.clone();
 
@@ -225,6 +260,10 @@ impl Channel for CliChannel {
                 tracing::info!(path = %socket_path.display(), "Unix CLI channel listening");
 
                 loop {
+                    if !self.is_enabled() {
+                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                        continue;
+                    }
                     match listener.accept().await {
                         Ok((stream, _)) => {
                             let tx = message_tx.clone();
@@ -248,6 +287,10 @@ impl Channel for CliChannel {
                 tracing::info!(addr = %addr, "TCP CLI channel listening");
 
                 loop {
+                    if !self.is_enabled() {
+                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                        continue;
+                    }
                     match listener.accept().await {
                         Ok((stream, _)) => {
                             let tx = message_tx.clone();
@@ -279,6 +322,20 @@ impl Channel for CliChannel {
     async fn send_tool_call(&self, packet: ToolCallPacket) -> Result<()> {
         let chat_id = packet.chat_id.clone();
         self.broadcast(&chat_id, CliPacket::ToolCall(packet)).await
+    }
+
+    async fn send_command_feedback(&self, feedback: CommandFeedback) -> Result<()> {
+        let text = if feedback.is_error {
+            format!("Error executing /{}: {}", feedback.command, feedback.result)
+        } else {
+            feedback.result
+        };
+        self.broadcast(&feedback.chat_id, CliPacket::Message(MessagePacket {
+            chat_id: feedback.chat_id.clone(),
+            content: text,
+            role: "assistant".into(),
+            metadata: None,
+        })).await
     }
 
     async fn on_chat_switch(&self, chat_id: &ChatId) -> Result<()> {
