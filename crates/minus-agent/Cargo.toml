@@ -12,6 +12,7 @@ minus-tools = { path = "../minus-tools" }
 minus-skills = { path = "../minus-skills" }
 minus-policy = { path = "../minus-policy" }
 minus-vault = { path = "../minus-vault" }
+minus-scheduler = { path = "../minus-scheduler" }
 anyhow = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

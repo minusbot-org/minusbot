@@ -1,4 +1,4 @@
-use minus_api::traits::{Command, CommandDefinition, CommandContext};
+use minus_api::{CommandDefinition, traits::{Command, CommandContext}};
 use anyhow::Result;
 use async_trait::async_trait;
 

@@ -4,9 +4,11 @@ use minus_core::{Tool, ToolCall, ToolContext, ToolDefinition, ToolResult, ToolRi
 
 mod chat;
 mod memory;
+mod schedule;
 
 pub use chat::*;
 pub use memory::*;
+pub use schedule::*;
 
 /// Built-in tool: time.now
 pub struct TimeNowTool;
@@ -47,5 +49,9 @@ pub fn all_builtin_tools() -> Vec<Box<dyn Tool>> {
         Box::new(ChatListTool),
         Box::new(ChatReadTool),
         Box::new(ChatSearchTool),
+        Box::new(ScheduleCreateTool),
+        Box::new(ScheduleListTool),
+        Box::new(ScheduleAbortTool),
+        Box::new(ScheduleUpdateTool),
     ]
 }

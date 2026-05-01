@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS memories (
     kind TEXT NOT NULL, -- 'short' or 'long'
     brief TEXT NOT NULL,
     content TEXT,
+    is_important INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );

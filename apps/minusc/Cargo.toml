@@ -14,3 +14,4 @@ colored = "2.1"
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }
+minus-api = { version = "0.1.0", path = "../../crates/minus-api" }

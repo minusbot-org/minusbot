@@ -10,12 +10,29 @@ use std::sync::{Arc, Mutex};
 use std::net::SocketAddr;
 use std::str::FromStr;
 
+// Import packets from our shared types (or re-define if they are part of the protocol)
+// For simplicity in the CLI, we can re-define them or use the ones from minus-api if it's a dependency.
+// minusc depends on minus-env which might depend on minus-core/api.
+use minus_api::types::*;
+
 #[derive(Debug, Serialize, Deserialize)]
 struct CliRequest {
     pub chat_id: String,
     pub content: String,
     #[serde(default)]
     pub secret: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum CliPacket {
+    Message(MessagePacket),
+    Notification(NotificationPacket),
+    ToolCall(ToolCallPacket),
+    ChatHistory { 
+        chat_id: ChatId, 
+        messages: Vec<Message> 
+    },
 }
 
 struct AppState {
@@ -35,8 +52,6 @@ async fn main() -> Result<()> {
     
     // Parse arguments
     let mut args = std::env::args().skip(1);
-    
-
     
     #[cfg(unix)]
     let mut protocol = Protocol::Unix;
@@ -223,27 +238,52 @@ async fn main() -> Result<()> {
         let mut printer = printer;
         let mut lines = BufReader::new(reader).lines();
         while let Ok(Some(line)) = lines.next_line().await {
-            // Handle notifications from server
-            if line.starts_with("NOTIFICATION:switch_chat:") {
-                let new_id = line.strip_prefix("NOTIFICATION:switch_chat:").unwrap();
-                let mut s = state_clone.lock().unwrap();
-                s.current_chat_id = new_id.to_string();
-                let _ = printer.print(format!("\n\x1b[1;33m[SYSTEM]\x1b[0m Switched to chat: \x1b[1;32m{}\x1b[0m\n", new_id));
-                continue;
-            }
-            if line.starts_with("NOTIFICATION:new_chat:") {
-                let new_id = line.strip_prefix("NOTIFICATION:new_chat:").unwrap();
-                let mut s = state_clone.lock().unwrap();
-                s.current_chat_id = new_id.to_string();
-                let _ = printer.print(format!("\n\x1b[1;33m[SYSTEM]\x1b[0m Created and switched to: \x1b[1;32m{}\x1b[0m\n", new_id));
-                continue;
-            }
+            let packet: CliPacket = match serde_json::from_str(&line) {
+                Ok(p) => p,
+                Err(_) => continue, // Ignore garbage
+            };
 
-            if line.starts_with("\x1b[") {
-                // Pre-formatted history or colored message
-                let _ = printer.print(line);
-            } else {
-                let _ = printer.print(format!("\x1b[1;35mbot\x1b[0m  \x1b[90m>\x1b[0m {}", line));
+            match packet {
+                CliPacket::Message(p) => {
+                    let prefix = match p.role.as_str() {
+                        "user" => "\x1b[1;34muser\x1b[0m  \x1b[90m>\x1b[0m".to_string(),
+                        "assistant" => "\x1b[1;35mbot\x1b[0m   \x1b[90m>\x1b[0m".to_string(),
+                        "system" => "\x1b[1;33msystem\x1b[0m\x1b[90m>\x1b[0m".to_string(),
+                        _ => "\x1b[90m>\x1b[0m".to_string(),
+                    };
+                    let _ = printer.print(format!("{} {}", prefix, p.content));
+                }
+                CliPacket::Notification(p) => {
+                    let label = match p.severity {
+                        NotificationSeverity::Info => "[INFO]".blue().bold(),
+                        NotificationSeverity::Warning => "[WARN]".yellow().bold(),
+                        NotificationSeverity::Error => "[ERROR]".red().bold(),
+                        NotificationSeverity::Success => "[OK]".green().bold(),
+                    };
+                    let _ = printer.print(format!("{} {}", label, p.content));
+                }
+                CliPacket::ToolCall(p) => {
+                    let _ = printer.print(format!("\x1b[1;36m[TOOL]\x1b[0m Calling: \x1b[33m{}\x1b[0m \x1b[90m({})\x1b[0m", p.name, p.brief));
+                }
+                CliPacket::ChatHistory { chat_id, messages } => {
+                    let mut s = state_clone.lock().unwrap();
+                    if s.current_chat_id != chat_id.0 {
+                        s.current_chat_id = chat_id.0.clone();
+                        let _ = printer.print(format!("\n\x1b[1;33m[SYSTEM]\x1b[0m Switched to chat: \x1b[1;32m{}\x1b[0m\n", chat_id.0));
+                    }
+                    
+                    let _ = printer.print(format!("\n\x1b[1;36m--- Chat History ---\x1b[0m"));
+                    for m in messages {
+                        let prefix = match m.role.as_str() {
+                            "user" => "\x1b[1;34muser\x1b[0m".to_string(),
+                            "assistant" => "\x1b[1;35mbot\x1b[0m ".to_string(),
+                            "system" => "\x1b[1;33msys\x1b[0m  ".to_string(),
+                            _ => "\x1b[90m???\x1b[0m  ".to_string(),
+                        };
+                        let _ = printer.print(format!("{} \x1b[90m[{}]\x1b[0m {}", prefix, m.created_at, m.content));
+                    }
+                    let _ = printer.print(format!("\x1b[1;36m--------------------\x1b[0m\n"));
+                }
             }
         }
     });
@@ -254,7 +294,7 @@ async fn main() -> Result<()> {
             s.current_chat_id.clone()
         };
         
-        let prompt = format!("\x1b[1;34muser\x1b[0m (\x1b[1;32m{}\x1b[0m) \x1b[90m>\x1b[0m", chat_id);
+        let prompt = format!("\x1b[1;34muser\x1b[0m (\x1b[1;32m{}\x1b[0m) \x1b[90m>\x1b[0m ", chat_id);
         let readline = rl.readline(&prompt);
         
         match readline {

@@ -26,7 +26,7 @@ pub enum ScheduleKind {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum JobAction {
     AgentPrompt { prompt: String },
-    MessageSend { content: String },
+    MessageSend { content: String, generate: bool },
 }
 
 /// A triggered job event sent to the runtime.
@@ -74,12 +74,32 @@ impl Scheduler {
         prompt: &str,
         target_chat_id: Option<&str>,
     ) -> Result<String> {
+        self.create_job_v2(
+            name,
+            schedule_str,
+            JobAction::AgentPrompt {
+                prompt: prompt.to_string(),
+            },
+            target_chat_id,
+        )
+        .await
+    }
+
+    /// Create a new job with a specific action.
+    pub async fn create_job_v2(
+        &self,
+        name: &str,
+        schedule_str: &str,
+        action: JobAction,
+        target_chat_id: Option<&str>,
+    ) -> Result<String> {
         let (kind, expr) = parse_schedule(schedule_str)?;
         let next_run = compute_next_run(&kind)?;
 
         let job_id = Uuid::new_v4().to_string();
-        let action = JobAction::AgentPrompt {
-            prompt: prompt.to_string(),
+        let action_kind = match &action {
+            JobAction::AgentPrompt { .. } => "agent_prompt",
+            JobAction::MessageSend { .. } => "message_send",
         };
         let action_json = serde_json::to_string(&action)?;
         let next_run_str = next_run.map(|t| t.to_rfc3339());
@@ -98,7 +118,7 @@ impl Scheduler {
                 None,
                 kind_str,
                 &expr_str,
-                "agent_prompt",
+                action_kind,
                 &action_json,
                 target_chat_id,
                 next_run_str.as_deref(),
@@ -113,7 +133,7 @@ impl Scheduler {
             description: None,
             schedule_kind: kind_str.to_string(),
             schedule_expr: expr_str,
-            action_kind: "agent_prompt".to_string(),
+            action_kind: action_kind.to_string(),
             action_json,
             target_chat_id: target_chat_id.map(|s| s.to_string()),
             enabled: true,
@@ -128,7 +148,7 @@ impl Scheduler {
         }
         self.notify.notify_one();
 
-        tracing::info!(job_id = %job_id, name = %name, schedule = %schedule_str, "Job created and cached");
+        tracing::info!(job_id = %job_id, name = %name, schedule = %schedule_str, action = %action_kind, "Job created and cached");
         Ok(job_id)
     }
 
@@ -153,6 +173,62 @@ impl Scheduler {
         let mut list: Vec<_> = map.values().cloned().collect();
         list.sort_by(|a, b| a.created_at.cmp(&b.created_at));
         Ok(list)
+    }
+
+    /// Update an existing job.
+    pub async fn update_job(
+        &self,
+        job_id: &str,
+        name: &str,
+        schedule_str: &str,
+        action: JobAction,
+    ) -> Result<()> {
+        let (kind, expr) = parse_schedule(schedule_str)?;
+        let next_run = compute_next_run(&kind)?;
+
+        let action_kind = match &action {
+            JobAction::AgentPrompt { .. } => "agent_prompt",
+            JobAction::MessageSend { .. } => "message_send",
+        };
+        let action_json = serde_json::to_string(&action)?;
+        let next_run_str = next_run.map(|t| t.to_rfc3339());
+
+        let (kind_str, expr_str) = match &kind {
+            ScheduleKind::OnceAt(_) => ("once_at", schedule_str.to_string()),
+            ScheduleKind::Delay(_) => ("delay", expr.clone()),
+            ScheduleKind::Cron(_) => ("cron", expr.clone()),
+            ScheduleKind::Interval(_) => ("interval", expr.clone()),
+        };
+
+        self.db
+            .update_job(
+                job_id,
+                name,
+                kind_str,
+                &expr_str,
+                action_kind,
+                &action_json,
+                next_run_str.as_deref(),
+            )
+            .await?;
+
+        // Update memory
+        {
+            let mut map = self.jobs.write().await;
+            if let Some(job) = map.get_mut(job_id) {
+                job.name = name.to_string();
+                job.schedule_kind = kind_str.to_string();
+                job.schedule_expr = expr_str;
+                job.action_kind = action_kind.to_string();
+                job.action_json = action_json;
+                job.next_run_at = next_run_str;
+                job.updated_at = Utc::now().to_rfc3339();
+            }
+        }
+        self.notify.notify_one();
+
+        tracing::info!(job_id = %job_id, name = %name, schedule = %schedule_str, action = %action_kind, "Job updated and cached");
+        Ok(())
     }
 
     /// Start the scheduler tick loop. This runs in the background.
@@ -247,6 +323,7 @@ impl Scheduler {
             let action: JobAction =
                 serde_json::from_str(&job.action_json).unwrap_or(JobAction::MessageSend {
                     content: "Job triggered".into(),
+                    generate: false,
                 });
 
             let trigger = JobTrigger {
@@ -255,6 +332,8 @@ impl Scheduler {
                 action,
                 target_chat_id: job.target_chat_id.clone(),
             };
+
+            tracing::info!(job_id = %job.id, action = ?trigger.action, "Triggering job");
 
             if let Err(e) = self.trigger_tx.send(trigger).await {
                 tracing::error!(error = %e, "Failed to send job trigger");

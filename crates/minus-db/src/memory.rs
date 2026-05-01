@@ -9,6 +9,7 @@ pub struct MemoryRecord {
     pub kind: String,
     pub brief: String,
     pub content: Option<String>,
+    pub is_important: bool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -20,21 +21,24 @@ impl Database {
         kind: &str,
         brief: &str,
         content: Option<&str>,
+        is_important: bool,
     ) -> Result<()> {
         let now = Utc::now().to_rfc3339();
         sqlx::query(
-            "INSERT INTO memories (id, kind, brief, content, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?)
+            "INSERT INTO memories (id, kind, brief, content, is_important, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(id) DO UPDATE SET
                 kind = excluded.kind,
                 brief = excluded.brief,
                 content = excluded.content,
+                is_important = excluded.is_important,
                 updated_at = excluded.updated_at",
         )
         .bind(id)
         .bind(kind)
         .bind(brief)
         .bind(content)
+        .bind(is_important as i32)
         .bind(&now)
         .bind(&now)
         .execute(&self.pool)
@@ -44,7 +48,7 @@ impl Database {
 
     pub async fn get_memories_by_kind(&self, kind: &str) -> Result<Vec<MemoryRecord>> {
         let rows = sqlx::query(
-            "SELECT id, kind, brief, content, created_at, updated_at FROM memories WHERE kind = ?",
+            "SELECT id, kind, brief, content, is_important, created_at, updated_at FROM memories WHERE kind = ?",
         )
         .bind(kind)
         .fetch_all(&self.pool)
@@ -57,6 +61,28 @@ impl Database {
                 kind: r.get("kind"),
                 brief: r.get("brief"),
                 content: r.get("content"),
+                is_important: r.get::<i32, _>("is_important") != 0,
+                created_at: r.get("created_at"),
+                updated_at: r.get("updated_at"),
+            })
+            .collect())
+    }
+
+    pub async fn get_important_memories(&self) -> Result<Vec<MemoryRecord>> {
+        let rows = sqlx::query(
+            "SELECT id, kind, brief, content, is_important, created_at, updated_at FROM memories WHERE is_important = 1",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .iter()
+            .map(|r| MemoryRecord {
+                id: r.get("id"),
+                kind: r.get("kind"),
+                brief: r.get("brief"),
+                content: r.get("content"),
+                is_important: true,
                 created_at: r.get("created_at"),
                 updated_at: r.get("updated_at"),
             })
@@ -68,7 +94,7 @@ impl Database {
             return Ok(vec![]);
         }
 
-        let mut query = String::from("SELECT id, kind, brief, content, created_at, updated_at FROM memories WHERE ");
+        let mut query = String::from("SELECT id, kind, brief, content, is_important, created_at, updated_at FROM memories WHERE ");
         for (i, _) in terms.iter().enumerate() {
             if i > 0 {
                 query.push_str(" OR ");
@@ -91,6 +117,7 @@ impl Database {
                 kind: r.get("kind"),
                 brief: r.get("brief"),
                 content: r.get("content"),
+                is_important: r.get::<i32, _>("is_important") != 0,
                 created_at: r.get("created_at"),
                 updated_at: r.get("updated_at"),
             })
@@ -106,7 +133,7 @@ impl Database {
     }
 
     pub async fn get_memory(&self, id: &str) -> Result<Option<MemoryRecord>> {
-        let row = sqlx::query("SELECT id, kind, brief, content, created_at, updated_at FROM memories WHERE id = ?")
+        let row = sqlx::query("SELECT id, kind, brief, content, is_important, created_at, updated_at FROM memories WHERE id = ?")
             .bind(id)
             .fetch_optional(&self.pool)
             .await?;
@@ -116,6 +143,7 @@ impl Database {
             kind: r.get("kind"),
             brief: r.get("brief"),
             content: r.get("content"),
+            is_important: r.get::<i32, _>("is_important") != 0,
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
         }))

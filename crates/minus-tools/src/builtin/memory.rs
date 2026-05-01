@@ -78,7 +78,8 @@ impl Tool for MemoryManageTool {
                         "description": "What to do with the memory"
                     },
                     "content": { "type": "string", "description": "The information to store or append." },
-                    "brief": { "type": "string", "description": "A short summary. Optional for 'save' if content < 128 chars." }
+                    "brief": { "type": "string", "description": "A short summary. Optional for 'save' if content < 128 chars." },
+                    "important": { "type": "boolean", "description": "If true, this memory will be loaded into the system prompt briefs.", "default": false }
                 },
                 "required": ["id", "action"]
             }),
@@ -94,6 +95,7 @@ impl Tool for MemoryManageTool {
         
         let id = call.arguments["id"].as_str().context("Missing id")?;
         let action = call.arguments["action"].as_str().context("Missing action")?;
+        let is_important = call.arguments["important"].as_bool().unwrap_or(false);
 
         match action {
             "save" => {
@@ -109,11 +111,11 @@ impl Tool for MemoryManageTool {
                         ("short", content, None)
                     }
                 };
-                db.save_memory(id, kind, final_brief, final_content).await?;
+                db.save_memory(id, kind, final_brief, final_content, is_important).await?;
                 Ok(ToolResult {
                     tool_call_id: call.id,
                     name: "memory_manage".into(),
-                    content: format!("Memory '{}' saved successfully as {}.", id, kind),
+                    content: format!("Memory '{}' saved successfully as {}. Important: {}.", id, kind, is_important),
                     is_error: false,
                 })
             }
@@ -139,11 +141,11 @@ impl Tool for MemoryManageTool {
                 let content = call.arguments["content"].as_str();
                 let existing = db.get_memory(id).await?;
                 if let Some(m) = existing {
-                    db.save_memory(id, &m.kind, brief, content).await?;
+                    db.save_memory(id, &m.kind, brief, content, is_important).await?;
                     Ok(ToolResult {
                         tool_call_id: call.id,
                         name: "memory_manage".into(),
-                        content: format!("Memory '{}' replaced.", id),
+                        content: format!("Memory '{}' replaced. Important: {}.", id, is_important),
                         is_error: false,
                     })
                 } else {
@@ -158,7 +160,7 @@ impl Tool for MemoryManageTool {
                         Some(old) => format!("{}\n{}", old, content_to_add),
                         None => content_to_add.to_string(),
                     };
-                    db.save_memory(id, &m.kind, &m.brief, Some(&new_content)).await?;
+                    db.save_memory(id, &m.kind, &m.brief, Some(&new_content), is_important).await?;
                     Ok(ToolResult {
                         tool_call_id: call.id,
                         name: "memory_manage".into(),

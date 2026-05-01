@@ -174,7 +174,7 @@ async fn main() -> Result<()> {
     skills.scan_and_index().await?;
 
     // 11. Scheduler
-    let (job_tx, _job_rx) = mpsc::channel::<minus_scheduler::JobTrigger>(64);
+    let (job_tx, mut job_rx) = mpsc::channel::<minus_scheduler::JobTrigger>(64);
     let scheduler = Arc::new(Scheduler::new(db.clone(), job_tx));
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::broadcast::channel::<()>(1);
@@ -190,6 +190,8 @@ async fn main() -> Result<()> {
         tools.clone(),
         skills.clone(),
         policy.clone(),
+        scheduler.clone(),
+        data_dir.config_dir(),
     ));
 
     // 12. Integrations registry
@@ -237,7 +239,7 @@ async fn main() -> Result<()> {
     // 15. Start CLI channel
     let (msg_tx, mut msg_rx) = mpsc::channel::<IncomingMessage>(64);
     let config_dir = data_dir.root.join("config");
-    let cli_channel = Arc::new(CliChannel::new(msg_tx, config_dir.clone()));
+    let cli_channel = Arc::new(CliChannel::new(msg_tx, config_dir.clone(), db.clone()));
     
     // Register as config provider
     runtime.register(cli_channel.clone()).await;
@@ -260,13 +262,60 @@ async fn main() -> Result<()> {
 
     loop {
         tokio::select! {
+            Some(trigger) = job_rx.recv() => {
+                if let Some(chat_id) = trigger.target_chat_id {
+                    match trigger.action {
+                        minus_scheduler::JobAction::MessageSend { content, generate } => {
+                            let msg = MessagePacket::new(ChatId(chat_id.clone()), "assistant", content.clone());
+                            let _ = cli_channel.send_message(msg).await;
+
+                            if generate {
+                                let incoming = IncomingMessage::new(ChatId(chat_id), ChannelId("cli".into()), content);
+                                let response = if minus_commands::is_slash_command(&incoming.content) {
+                                    Runtime::process_command(runtime.clone(), &incoming, cli_channel.clone()).await
+                                } else {
+                                    Runtime::process_message(runtime.clone(), &incoming, cli_channel.clone()).await
+                                };
+                                
+                                let response_text = match response {
+                                    Ok(text) => text,
+                                    Err(e) => format!("Error: {}", e),
+                                };
+                                let out = MessagePacket::new(incoming.chat_id, "assistant", response_text);
+                                let _ = cli_channel.send_message(out).await;
+                            }
+                        }
+                        minus_scheduler::JobAction::AgentPrompt { prompt } => {
+                            let incoming = IncomingMessage::new(ChatId(chat_id), ChannelId("cli".into()), prompt);
+                            let response = if minus_commands::is_slash_command(&incoming.content) {
+                                Runtime::process_command(runtime.clone(), &incoming, cli_channel.clone()).await
+                            } else {
+                                Runtime::process_message(runtime.clone(), &incoming, cli_channel.clone()).await
+                            };
+
+                            let response_text = match response {
+                                Ok(text) => text,
+                                Err(e) => format!("Error: {}", e),
+                            };
+                            let out = MessagePacket::new(incoming.chat_id, "assistant", response_text);
+                            let _ = cli_channel.send_message(out).await;
+                        }
+                    }
+                }
+            }
             Some(incoming) = msg_rx.recv() => {
-                let response = match minus_runtime::Runtime::process_message(runtime.clone(), &incoming, cli_channel.clone()).await {
+                let response = if minus_commands::is_slash_command(&incoming.content) {
+                    Runtime::process_command(runtime.clone(), &incoming, cli_channel.clone()).await
+                } else {
+                    Runtime::process_message(runtime.clone(), &incoming, cli_channel.clone()).await
+                };
+
+                let response_text = match response {
                     Ok(text) => text,
                     Err(e) => format!("Error: {}", e),
                 };
-                let out = OutgoingMessage::new(incoming.chat_id, response);
-                if let Err(e) = cli_channel.send(out).await {
+                let out = MessagePacket::new(incoming.chat_id, "assistant", response_text);
+                if let Err(e) = cli_channel.send_message(out).await {
                     tracing::error!(error = %e, "Failed to send response");
                 }
             }

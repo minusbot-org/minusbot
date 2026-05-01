@@ -99,4 +99,32 @@ impl Database {
             .await?;
         Ok(())
     }
+
+    pub async fn update_job(
+        &self,
+        id: &str,
+        name: &str,
+        schedule_kind: &str,
+        schedule_expr: &str,
+        action_kind: &str,
+        action_json: &str,
+        next_run_at: Option<&str>,
+    ) -> Result<()> {
+        let now = Utc::now().to_rfc3339();
+        sqlx::query(
+            "UPDATE jobs SET name = ?, schedule_kind = ?, schedule_expr = ?, action_kind = ?, action_json = ?, next_run_at = ?, updated_at = ?
+             WHERE id = ?",
+        )
+        .bind(name)
+        .bind(schedule_kind)
+        .bind(schedule_expr)
+        .bind(action_kind)
+        .bind(action_json)
+        .bind(next_run_at)
+        .bind(&now)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
 }

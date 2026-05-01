@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 minus-core = { path = "../minus-core" }
 minus-db = { path = "../minus-db" }
+minus-scheduler = { path = "../minus-scheduler" }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }

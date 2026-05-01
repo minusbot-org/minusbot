@@ -20,6 +20,18 @@ pub struct CliRequest {
     pub secret: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum CliPacket {
+    Message(MessagePacket),
+    Notification(NotificationPacket),
+    ToolCall(ToolCallPacket),
+    ChatHistory { 
+        chat_id: ChatId, 
+        messages: Vec<Message> 
+    },
+}
+
 #[derive(Clone, Debug)]
 pub enum CliProtocol {
     #[cfg(unix)]
@@ -32,10 +44,15 @@ pub struct CliChannel {
     message_tx: mpsc::Sender<IncomingMessage>,
     active_streams: Arc<Mutex<Vec<(ChatId, mpsc::Sender<String>)>>>,
     config: Arc<dyn ConfigProvider>,
+    db: minus_db::Database,
 }
 
 impl CliChannel {
-    pub fn new(message_tx: mpsc::Sender<IncomingMessage>, config_dir: std::path::PathBuf) -> Self {
+    pub fn new(
+        message_tx: mpsc::Sender<IncomingMessage>,
+        config_dir: std::path::PathBuf,
+        db: minus_db::Database,
+    ) -> Self {
         let config_path = config_dir.join("channel-cli.toml");
         let config = Arc::new(FileConfigProvider::new("channel.cli", config_path));
 
@@ -43,6 +60,7 @@ impl CliChannel {
             message_tx,
             active_streams: Arc::new(Mutex::new(Vec::new())),
             config,
+            db,
         }
     }
 
@@ -130,43 +148,12 @@ impl CliChannel {
         Ok(())
     }
 
-    async fn handle_notification(&self, chat_id: &ChatId, meta: &serde_json::Value) -> Result<()> {
-        let n_kind = meta
-            .get("notification_kind")
-            .and_then(|k| k.as_str())
-            .unwrap_or("unknown");
-        let data = meta.get("data").and_then(|d| d.as_str()).unwrap_or("");
-
-        match n_kind {
-            "switch_chat" | "new_chat" => {
-                let is_new = n_kind == "new_chat";
-                // Send a marker to the CLI client
-                let marker = format!("NOTIFICATION:{}:{}", n_kind, data);
-                let streams = self.active_streams.lock().await;
-                for (cid, tx) in streams.iter() {
-                    if cid.0 == chat_id.0 {
-                        let _ = tx.send(marker.clone()).await;
-                    }
-                }
-
-                // Automatically request history for the new/switched chat
-                let tx_msg = self.message_tx.clone();
-                let switch_id = data.to_string();
-                tokio::spawn(async move {
-                    let req = IncomingMessage::new(
-                        ChatId(switch_id),
-                        ChannelId("cli".into()),
-                        if is_new {
-                            "/chat read 1"
-                        } else {
-                            "/chat read 10"
-                        },
-                    );
-                    let _ = tx_msg.send(req).await;
-                });
-            }
-            _ => {
-                tracing::info!(kind = %n_kind, "Unhandled notification in CLI channel");
+    async fn broadcast(&self, chat_id: &ChatId, packet: CliPacket) -> Result<()> {
+        let json = serde_json::to_string(&packet)?;
+        let streams = self.active_streams.lock().await;
+        for (cid, tx) in streams.iter() {
+            if cid.0 == chat_id.0 {
+                let _ = tx.send(json.clone()).await;
             }
         }
         Ok(())
@@ -219,8 +206,6 @@ impl Channel for CliChannel {
             #[cfg(not(unix))]
             unreachable!()
         };
-
-        // TODO: Read cli.toml from ctx.config_dir to override defaults if present
 
         match protocol {
             #[cfg(unix)]
@@ -281,51 +266,35 @@ impl Channel for CliChannel {
         }
     }
 
-    async fn send_warning(&self, chat_id: &ChatId, msg: &str) -> Result<()> {
-        let text = format!("\x1b[33mWarning:\x1b[0m {}", msg);
-        let mut out = OutgoingMessage::new(chat_id.clone(), text);
-        out.metadata = Some(serde_json::json!({"kind": "formatted"}));
-        self.send(out).await
+    async fn send_message(&self, packet: MessagePacket) -> Result<()> {
+        let chat_id = packet.chat_id.clone();
+        self.broadcast(&chat_id, CliPacket::Message(packet)).await
     }
 
-    async fn send_error(&self, chat_id: &ChatId, msg: &str) -> Result<()> {
-        let text = format!("\x1b[31mError:\x1b[0m {}", msg);
-        let mut out = OutgoingMessage::new(chat_id.clone(), text);
-        out.metadata = Some(serde_json::json!({"kind": "formatted"}));
-        self.send(out).await
+    async fn send_notification(&self, packet: NotificationPacket) -> Result<()> {
+        let chat_id = packet.chat_id.clone();
+        self.broadcast(&chat_id, CliPacket::Notification(packet)).await
     }
 
-    async fn send(&self, msg: OutgoingMessage) -> Result<()> {
-        // Route to specific handler if kind is specified
-        if let Some(meta) = &msg.metadata {
-            if let Some(kind) = meta.get("kind").and_then(|k| k.as_str()) {
-                if kind == "notification" {
-                    return self.handle_notification(&msg.chat_id, meta).await;
-                }
+    async fn send_tool_call(&self, packet: ToolCallPacket) -> Result<()> {
+        let chat_id = packet.chat_id.clone();
+        self.broadcast(&chat_id, CliPacket::ToolCall(packet)).await
+    }
 
-                // Avoid recursion: if it's already formatted, just send it
-                if kind != "formatted" {
-                    if kind == "warning" {
-                        let raw_msg = msg
-                            .content
-                            .strip_prefix("WARNING: ")
-                            .unwrap_or(&msg.content);
-                        return self.send_warning(&msg.chat_id, raw_msg).await;
-                    } else if kind == "error" {
-                        let raw_msg = msg.content.strip_prefix("ERROR: ").unwrap_or(&msg.content);
-                        return self.send_error(&msg.chat_id, raw_msg).await;
-                    }
-                }
-            }
-        }
-
-        let streams = self.active_streams.lock().await;
-        for (cid, tx) in streams.iter() {
-            if cid.0 == msg.chat_id.0 {
-                let _ = tx.send(msg.content.clone()).await;
-            }
-        }
-        Ok(())
+    async fn on_chat_switch(&self, chat_id: &ChatId) -> Result<()> {
+        let messages = self.db.get_messages(&chat_id.0, 50).await?;
+        let packet = CliPacket::ChatHistory {
+            chat_id: chat_id.clone(),
+            messages: messages.into_iter().map(|m| Message {
+                id: m.id,
+                chat_id: m.chat_id,
+                role: m.role,
+                content: m.content,
+                metadata_json: m.metadata_json,
+                created_at: m.created_at,
+            }).collect(),
+        };
+        self.broadcast(chat_id, packet).await
     }
 }
 

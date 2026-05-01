@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::any::Any;
-use std::sync::Arc;
+
 use uuid::Uuid;
 use crate::permissions::Permission;
 
@@ -128,27 +127,77 @@ impl IncomingMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OutgoingMessage {
+pub struct MessagePacket {
     pub chat_id: ChatId,
+    pub role: String,
     pub content: String,
     pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum NotificationKind {
-    SwitchChat,
-    NewChat,
+pub enum NotificationSeverity {
+    Info,
+    Warning,
+    Error,
+    Success,
 }
 
-impl OutgoingMessage {
-    pub fn new(chat_id: ChatId, content: impl Into<String>) -> Self {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NotificationPacket {
+    pub chat_id: ChatId,
+    pub severity: NotificationSeverity,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallPacket {
+    pub chat_id: ChatId,
+    pub call_id: String,
+    pub name: String,
+    pub brief: String,
+}
+
+impl MessagePacket {
+    pub fn new(chat_id: ChatId, role: impl Into<String>, content: impl Into<String>) -> Self {
         Self {
             chat_id,
+            role: role.into(),
             content: content.into(),
             metadata: None,
         }
     }
+}
+
+// --- Commands ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandDefinition {
+    pub name: String,
+    pub description: String,
+    pub usage: String,
+    pub category: String,
+    pub aliases: Vec<String>,
+    pub min_args: usize,
+}
+
+// --- Skills ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillDefinition {
+    pub name: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillCall {
+    pub name: String,
+    pub arguments: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillResult {
+    pub content: String,
 }
 
 // --- Tools ---
@@ -272,19 +321,6 @@ pub struct AgentContext {
     pub system_prompt: String,
 }
 
-#[derive(Debug, Clone)]
-pub struct ToolContext {
-    pub chat_id: ChatId,
-    pub channel_id: ChannelId,
-    pub component_id: ComponentId,
-    pub store: Option<Arc<dyn Any + Send + Sync>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ChannelContext {
-    pub channel_id: ChannelId,
-    pub config_dir: std::path::PathBuf,
-}
 
 // --- Secret declarations ---
 
@@ -351,4 +387,3 @@ pub struct Message {
     pub created_at: String,
 }
 
-pub type SecretDeclarationStatus = SecretDeclaration;

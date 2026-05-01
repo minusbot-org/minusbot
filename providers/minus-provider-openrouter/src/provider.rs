@@ -31,19 +31,23 @@ impl Provider for OpenRouterProvider {
         self.inner.config()
     }
 
+    fn capabilities(&self) -> ProviderCapabilities {
+        self.inner.capabilities()
+    }
+
     fn as_text_provider(&self) -> Option<&dyn TextProvider> {
         Some(self)
     }
 
-    async fn is_ready(&self) -> Result<()> {
+    async fn is_ready(&self) -> bool {
         self.inner.is_ready().await
     }
 }
 
 #[async_trait]
 impl TextProvider for OpenRouterProvider {
-    async fn complete_text(&self, request: ProviderRequest) -> Result<ProviderResponse> {
-        self.inner.complete_text(request).await
+    async fn generate_text(&self, request: ProviderRequest) -> Result<ProviderResponse> {
+        self.inner.generate_text(request).await
     }
 
     async fn get_text_models(&self, secret_key: Option<String>) -> Result<Vec<String>> {

@@ -39,23 +39,32 @@ impl Provider for OpenAiProvider {
         self.config.clone()
     }
 
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            llm: true,
+            tools: true,
+            vision: false,
+            embeddings: false,
+        }
+    }
+
     fn as_text_provider(&self) -> Option<&dyn TextProvider> {
         Some(self)
     }
 
-    async fn is_ready(&self) -> Result<()> {
+    async fn is_ready(&self) -> bool {
         if let Some(cp) = &self.config {
-            if cp.read_config("text_model").await?.is_none() {
-                anyhow::bail!("No default text model set for '{}'. Use '/models <model>'.", self.name());
+            if let Ok(Some(_)) = cp.read_config("text_model").await {
+                return true;
             }
         }
-        Ok(())
+        false
     }
 }
 
 #[async_trait]
 impl TextProvider for OpenAiProvider {
-    async fn complete_text(&self, request: ProviderRequest) -> Result<ProviderResponse> {
+    async fn generate_text(&self, request: ProviderRequest) -> Result<ProviderResponse> {
         let messages: Vec<ApiMessage> = request.messages.iter().map(|m| {
             let mut msg = ApiMessage {
                 role: m.role.to_string(),

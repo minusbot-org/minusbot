@@ -23,6 +23,8 @@ pub struct Agent {
     tools: Arc<RwLock<ToolRegistry>>,
     skills: Arc<SkillManager>,
     policy: Arc<PolicyEngine>,
+    scheduler: Arc<minus_scheduler::Scheduler>,
+    config_dir: std::path::PathBuf,
 }
 
 impl Agent {
@@ -35,6 +37,8 @@ impl Agent {
         tools: Arc<RwLock<ToolRegistry>>,
         skills: Arc<SkillManager>,
         policy: Arc<PolicyEngine>,
+        scheduler: Arc<minus_scheduler::Scheduler>,
+        config_dir: std::path::PathBuf,
     ) -> Self {
         Self {
             db: Arc::new(db),
@@ -45,11 +49,17 @@ impl Agent {
             tools,
             skills,
             policy,
+            scheduler,
+            config_dir,
         }
     }
 
     /// Handle an incoming message and produce a response.
-    pub async fn handle_message(&self, incoming: &IncomingMessage) -> Result<String> {
+    pub async fn handle_message(
+        &self,
+        incoming: &IncomingMessage,
+        channel: Arc<dyn traits::Channel>,
+    ) -> Result<String> {
         let chat_id = &incoming.chat_id.0;
 
         // 1. Ensure chat exists
@@ -70,8 +80,8 @@ impl Agent {
             None => return Ok("No LLM provider is configured. Use `/providers <id>` to set one.".to_string()),
         };
         
-        if let Err(e) = provider.is_ready().await {
-            return Ok(format!("Provider '{}' is not ready: {}", provider.id(), e));
+        if !provider.is_ready().await {
+            return Ok(format!("Provider '{}' is not ready. Use '/models' to select a model.", provider.id()));
         }
         drop(providers);
 
@@ -86,28 +96,38 @@ impl Agent {
         let skills_content = self.skills.get_loaded_content(chat_id).await?;
 
         // 6. Fetch memories for system prompt
-        let short_memories = self.db.get_memories_by_kind("short").await?;
-        let long_memories = self.db.get_memories_by_kind("long").await?;
-
-        let mut memory_context = String::new();
-        if !short_memories.is_empty() {
-            memory_context.push_str("\n\nKnown user profile (Short-term memory):\n");
-            for m in short_memories {
-                memory_context.push_str(&format!("- {}: {}\n", m.id, m.brief));
-            }
-        }
-        if !long_memories.is_empty() {
-            memory_context.push_str("\nLong-term memory available briefs (use memory.search or memory.manage to see full content):\n");
-            for m in long_memories {
-                memory_context.push_str(&format!("- [{}]: {}\n", m.id, m.brief));
+        let important_memories = self.db.get_important_memories().await?;
+        let mut memory_briefs = String::new();
+        if important_memories.is_empty() {
+            memory_briefs.push_str("(No important memories saved yet)");
+        } else {
+            for m in important_memories {
+                memory_briefs.push_str(&format!("- [{}]: {} (created: {})\n", m.id, m.brief, m.created_at));
             }
         }
 
         // 7. Build system prompt
+        let now = chrono::Local::now();
+        let date_str = now.format("%Y-%m-%d").to_string();
+        let time_str = now.format("%H:%M:%S").to_string();
+
         let mut system_prompt = {
-            let cfg = self.config.read().await;
-            cfg.agent.system_prompt.clone()
+            let custom_prompt_path = self.config_dir.join("system_prompt.txt");
+            if custom_prompt_path.exists() {
+                std::fs::read_to_string(custom_prompt_path).unwrap_or_else(|_| include_str!("system_prompt.txt").to_string())
+            } else {
+                include_str!("system_prompt.txt").to_string()
+            }
         };
+
+        // Replace placeholders
+        system_prompt = system_prompt
+            .replace("{date}", &date_str)
+            .replace("{time}", &time_str)
+            .replace("{chat_id}", chat_id)
+            .replace("{channel_id}", &incoming.channel_id.0)
+            .replace("{memory_briefs}", &memory_briefs);
+
         if !skills_content.is_empty() {
             system_prompt.push_str("\n\n--- Loaded Skills ---\n");
             for skill in &skills_content {
@@ -115,8 +135,6 @@ impl Agent {
                 system_prompt.push('\n');
             }
         }
-        system_prompt.push_str(&memory_context);
-        system_prompt.push_str("\n\nYou have access to memory tools. Use memory.short_save for quick facts and memory.long_save for detailed info. You can also search conversations using chat.search.");
 
         // 8. Build provider messages
         let mut messages = Vec::new();
@@ -260,6 +278,13 @@ impl Agent {
                 // Execute each tool call
                 for tc in &response.tool_calls {
                     tracing::info!(tool = %tc.name, "Executing tool call");
+                    
+                    let _ = channel.send_tool_call(ToolCallPacket {
+                        chat_id: incoming.chat_id.clone(),
+                        call_id: tc.id.clone(),
+                        name: tc.name.clone(),
+                        brief: String::new(), // TODO: Add actual brief if needed
+                    }).await;
 
                     // Policy check
                     let tool_decision = self.policy.evaluate(&PolicyAction::ToolCall {
@@ -272,6 +297,7 @@ impl Agent {
                             channel_id: incoming.channel_id.clone(),
                             component_id: ComponentId::new("agent"),
                             store: Some(self.db.clone() as Arc<dyn std::any::Any + Send + Sync>),
+                            scheduler: Some(self.scheduler.clone() as Arc<dyn std::any::Any + Send + Sync>),
                         };
                         tools_lock.execute(tc.clone(), ctx).await?
                     } else {

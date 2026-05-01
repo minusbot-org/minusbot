@@ -90,7 +90,7 @@ impl ProviderRegistry {
             }
         }
 
-        text_provider.complete_text(request).await
+        text_provider.generate_text(request).await
     }
 
     /// Get text models for the default provider.

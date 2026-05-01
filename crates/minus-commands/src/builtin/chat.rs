@@ -1,4 +1,4 @@
-use minus_api::{NotificationKind, traits::{Command, CommandDefinition, CommandContext}};
+use minus_api::{ChatId, NotificationPacket, NotificationSeverity, CommandDefinition, traits::{Command, CommandContext}};
 use anyhow::Result;
 use async_trait::async_trait;
 
@@ -47,13 +47,17 @@ impl Command for ChatListCommand {
                 match chat {
                     Some(c) => {
                         // Notify channel about chat switch
-                        ctx.channel.send_notification(&ctx.chat_id, NotificationKind::SwitchChat, &c.id).await?;
+                        ctx.channel.on_chat_switch(&ChatId(c.id.clone())).await?;
 
                         // Attempt to update channel config
                         let provider_id = format!("channel.{}", ctx.channel_id.0);
                         if let Some(channel_config) = ctx.config_registry.get_provider(&provider_id).await {
                             if let Err(e) = channel_config.set_config("chat", &c.id).await {
-                                let _ = ctx.channel.send_warning(&ctx.chat_id, &format!("Failed to save default chat to config: {}", e)).await;
+                                let _ = ctx.channel.send_notification(NotificationPacket {
+                                    chat_id: ctx.chat_id.clone(),
+                                    severity: NotificationSeverity::Warning,
+                                    content: format!("Failed to save default chat to config: {}", e),
+                                }).await;
                             }
                         }
                         
@@ -69,7 +73,11 @@ impl Command for ChatListCommand {
                 db.ensure_chat(&id, &ctx.channel_id.0, &id, title.as_deref()).await?;
                 
                 // Notify channel about new chat
-                ctx.channel.send_notification(&ctx.chat_id, NotificationKind::NewChat, &id).await?;
+                ctx.channel.send_notification(NotificationPacket {
+                    chat_id: ctx.chat_id.clone(),
+                    severity: NotificationSeverity::Success,
+                    content: format!("Created new chat: {}", id),
+                }).await?;
                 
                 Ok(format!("Created new chat: {}", title.unwrap_or_else(|| id.clone())))
             }
