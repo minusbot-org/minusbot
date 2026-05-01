@@ -111,6 +111,10 @@ impl MinusDatabase for Runtime {
     async fn tail_audit(&self, limit: i64) -> Result<Vec<AuditEvent>> {
         MinusDatabase::tail_audit(&self.db, limit).await
     }
+
+    async fn list_memories(&self) -> Result<Vec<Memory>> {
+        MinusDatabase::list_memories(&self.db).await
+    }
 }
 
 #[minus_api::async_trait]

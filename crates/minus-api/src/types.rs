@@ -387,3 +387,13 @@ pub struct Message {
     pub created_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Memory {
+    pub id: String,
+    pub kind: String,
+    pub brief: String,
+    pub content: Option<String>,
+    pub is_important: bool,
+    pub created_at: DateTime<Utc>,
+}
+

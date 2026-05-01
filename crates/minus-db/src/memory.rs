@@ -148,4 +148,25 @@ impl Database {
             updated_at: r.get("updated_at"),
         }))
     }
+
+    pub async fn list_memories(&self) -> Result<Vec<MemoryRecord>> {
+        let rows = sqlx::query(
+            "SELECT id, kind, brief, content, is_important, created_at, updated_at FROM memories ORDER BY created_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .iter()
+            .map(|r| MemoryRecord {
+                id: r.get("id"),
+                kind: r.get("kind"),
+                brief: r.get("brief"),
+                content: r.get("content"),
+                is_important: r.get::<i32, _>("is_important") != 0,
+                created_at: r.get("created_at"),
+                updated_at: r.get("updated_at"),
+            })
+            .collect())
+    }
 }

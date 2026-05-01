@@ -201,6 +201,9 @@ pub trait MinusDatabase: Send + Sync {
     // Audit management
     async fn log_audit(&self, id: &str, actor: &str, action: &str, target: Option<&str>, metadata: Option<&str>, created_at: &str) -> Result<()>;
     async fn tail_audit(&self, limit: i64) -> Result<Vec<AuditEvent>>;
+
+    // Memory management
+    async fn list_memories(&self) -> Result<Vec<Memory>>;
 }
 
 pub struct FileConfigProvider {

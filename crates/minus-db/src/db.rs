@@ -126,4 +126,16 @@ impl minus_api::traits::MinusDatabase for Database {
             created_at: chrono::DateTime::parse_from_rfc3339(&r.created_at).unwrap_or_default().with_timezone(&chrono::Utc),
         }).collect())
     }
+
+    async fn list_memories(&self) -> Result<Vec<minus_api::Memory>> {
+        let records = self.list_memories().await?;
+        Ok(records.into_iter().map(|r| minus_api::Memory {
+            id: r.id,
+            kind: r.kind,
+            brief: r.brief,
+            content: r.content,
+            is_important: r.is_important,
+            created_at: chrono::DateTime::parse_from_rfc3339(&r.created_at).unwrap_or_default().with_timezone(&chrono::Utc),
+        }).collect())
+    }
 }

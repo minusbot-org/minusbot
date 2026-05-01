@@ -7,6 +7,7 @@ pub mod models;
 pub mod secrets;
 pub mod apikey;
 pub mod tools;
+pub mod memory;
 
 use crate::registry::CommandRegistry;
 use std::sync::Arc;
@@ -22,4 +23,5 @@ pub fn register_all(reg: &mut CommandRegistry) {
     reg.register(Arc::new(secrets::SecretCommand));
     reg.register(Arc::new(apikey::ApikeyCommand));
     reg.register(Arc::new(tools::ToolsCommand));
+    reg.register(Arc::new(memory::MemoryCommand));
 }
