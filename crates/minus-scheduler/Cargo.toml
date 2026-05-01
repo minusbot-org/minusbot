@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 minus-core = { path = "../minus-core" }
+minus-api = { path = "../minus-api" }
 minus-db = { path = "../minus-db" }
 anyhow = { workspace = true }
 tokio = { workspace = true }

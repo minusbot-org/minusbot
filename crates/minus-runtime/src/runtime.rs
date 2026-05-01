@@ -51,6 +51,7 @@ impl Runtime {
                 tools: runtime.clone(),
                 secrets: runtime.clone(),
                 providers: runtime.clone(),
+                scheduler: runtime.clone(),
                 shutdown_trigger: None, // TODO: Connect to shutdown_tx
                 all_commands: registry.list(),
             };
@@ -114,6 +115,25 @@ impl MinusDatabase for Runtime {
 
     async fn list_memories(&self) -> Result<Vec<Memory>> {
         MinusDatabase::list_memories(&self.db).await
+    }
+
+    async fn save_memory(&self, id: &str, kind: &str, brief: &str, content: Option<&str>, is_important: bool) -> Result<()> {
+        MinusDatabase::save_memory(&self.db, id, kind, brief, content, is_important).await
+    }
+
+    async fn delete_memory(&self, id: &str) -> Result<bool> {
+        MinusDatabase::delete_memory(&self.db, id).await
+    }
+}
+
+#[minus_api::async_trait]
+impl minus_api::traits::MinusScheduler for Runtime {
+    async fn list_tasks(&self) -> Result<Vec<SchedulerTask>> {
+        minus_api::traits::MinusScheduler::list_tasks(self.scheduler.as_ref()).await
+    }
+
+    async fn delete_task(&self, id: &str) -> Result<bool> {
+        minus_api::traits::MinusScheduler::delete_task(self.scheduler.as_ref(), id).await
     }
 }
 

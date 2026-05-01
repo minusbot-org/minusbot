@@ -1431,6 +1431,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "cron",
+ "minus-api",
  "minus-core",
  "minus-db",
  "serde",

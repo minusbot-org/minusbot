@@ -138,4 +138,12 @@ impl minus_api::traits::MinusDatabase for Database {
             created_at: chrono::DateTime::parse_from_rfc3339(&r.created_at).unwrap_or_default().with_timezone(&chrono::Utc),
         }).collect())
     }
+
+    async fn save_memory(&self, id: &str, kind: &str, brief: &str, content: Option<&str>, is_important: bool) -> Result<()> {
+        self.save_memory(id, kind, brief, content, is_important).await
+    }
+
+    async fn delete_memory(&self, id: &str) -> Result<bool> {
+        self.delete_memory(id).await
+    }
 }

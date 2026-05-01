@@ -1,10 +1,99 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use minus_core::{Tool, ToolCall, ToolContext, ToolDefinition, ToolResult, ToolRisk};
 use minus_db::Database;
 use serde_json::json;
 
-/// Tool: memory.search
+/// Tool: memory_write
+pub struct MemoryWriteTool;
+
+#[async_trait]
+impl Tool for MemoryWriteTool {
+    fn definition(&self) -> ToolDefinition {
+        ToolDefinition {
+            name: "memory_write".into(),
+            description: "Save or update a memory entry. Use for facts, user preferences, or long-term information.".into(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string", "description": "Unique identifier for the memory entry (e.g., 'user_birthday')" },
+                    "brief": { "type": "string", "description": "A short summary of the information." },
+                    "content": { "type": "string", "description": "Detailed information to store." },
+                    "is_important": { "type": "boolean", "description": "If true, this memory will be prioritized in the assistant's context.", "default": false }
+                },
+                "required": ["id", "brief", "content"]
+            }),
+            risk: ToolRisk::Medium,
+            side_effect: true,
+        }
+    }
+
+    async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
+        let db = ctx.store.as_ref()
+            .and_then(|s| s.downcast_ref::<Database>())
+            .context("Database not found in ToolContext")?;
+        
+        let id = call.arguments["id"].as_str().context("Missing id")?;
+        let brief = call.arguments["brief"].as_str().context("Missing brief")?;
+        let content = call.arguments["content"].as_str().context("Missing content")?;
+        let is_important = call.arguments["is_important"].as_bool().unwrap_or(false);
+
+        db.save_memory(id, "long", brief, Some(content), is_important).await?;
+
+        Ok(ToolResult {
+            tool_call_id: call.id,
+            name: "memory_write".into(),
+            content: format!("Memory '{}' saved successfully.", id),
+            is_error: false,
+        })
+    }
+}
+
+/// Tool: memory_read
+pub struct MemoryReadTool;
+
+#[async_trait]
+impl Tool for MemoryReadTool {
+    fn definition(&self) -> ToolDefinition {
+        ToolDefinition {
+            name: "memory_read".into(),
+            description: "Retrieve a specific memory by its ID.".into(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string", "description": "The unique identifier of the memory to read" }
+                },
+                "required": ["id"]
+            }),
+            risk: ToolRisk::Low,
+            side_effect: false,
+        }
+    }
+
+    async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
+        let db = ctx.store.as_ref()
+            .and_then(|s| s.downcast_ref::<Database>())
+            .context("Database not found in ToolContext")?;
+        
+        let id = call.arguments["id"].as_str().context("Missing id")?;
+        let memory = db.get_memory(id).await?;
+
+        let content = match memory.as_ref() {
+            Some(m) => format!("ID: {}\nBrief: {}\nContent: {}\nImportant: {}\nCreated: {}", 
+                m.id, m.brief, m.content.as_deref().unwrap_or("(no content)"), m.is_important, m.created_at),
+            None => format!("Memory with ID '{}' not found.", id),
+        };
+
+        Ok(ToolResult {
+            tool_call_id: call.id,
+            name: "memory_read".into(),
+            content,
+            is_error: memory.is_none(),
+        })
+    }
+}
+
+/// Tool: memory_search
 pub struct MemorySearchTool;
 
 #[async_trait]
@@ -12,7 +101,7 @@ impl Tool for MemorySearchTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
             name: "memory_search".into(),
-            description: "Search for long-term memories using keywords.".into(),
+            description: "Search for memories using keywords in their brief or content.".into(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -59,31 +148,23 @@ impl Tool for MemorySearchTool {
     }
 }
 
-/// Tool: memory.manage
-pub struct MemoryManageTool;
+/// Tool: memory_delete
+pub struct MemoryDeleteTool;
 
 #[async_trait]
-impl Tool for MemoryManageTool {
+impl Tool for MemoryDeleteTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
-            name: "memory_manage".into(),
-            description: "Save, update, append to, or delete a memory. Use 'save' for new entries (with optional brief).".into(),
+            name: "memory_delete".into(),
+            description: "Delete a memory entry permanently.".into(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "id": { "type": "string", "description": "Unique identifier for the memory entry" },
-                    "action": { 
-                        "type": "string", 
-                        "enum": ["save", "replace", "append", "delete"],
-                        "description": "What to do with the memory"
-                    },
-                    "content": { "type": "string", "description": "The information to store or append." },
-                    "brief": { "type": "string", "description": "A short summary. Optional for 'save' if content < 128 chars." },
-                    "important": { "type": "boolean", "description": "If true, this memory will be loaded into the system prompt briefs.", "default": false }
+                    "id": { "type": "string", "description": "The unique identifier of the memory to delete" }
                 },
-                "required": ["id", "action"]
+                "required": ["id"]
             }),
-            risk: ToolRisk::Medium,
+            risk: ToolRisk::High,
             side_effect: true,
         }
     }
@@ -94,84 +175,21 @@ impl Tool for MemoryManageTool {
             .context("Database not found in ToolContext")?;
         
         let id = call.arguments["id"].as_str().context("Missing id")?;
-        let action = call.arguments["action"].as_str().context("Missing action")?;
-        let is_important = call.arguments["important"].as_bool().unwrap_or(false);
 
-        match action {
-            "save" => {
-                let content = call.arguments["content"].as_str().context("Missing content for save")?;
-                let brief = call.arguments["brief"].as_str();
-
-                let (kind, final_brief, final_content) = match brief {
-                    Some(b) => ("long", b, Some(content)),
-                    None => {
-                        if content.len() >= 128 {
-                            bail!("Content is too long (>= 128 chars). Please provide a 'brief' summary.");
-                        }
-                        ("short", content, None)
-                    }
-                };
-                db.save_memory(id, kind, final_brief, final_content, is_important).await?;
-                Ok(ToolResult {
-                    tool_call_id: call.id,
-                    name: "memory_manage".into(),
-                    content: format!("Memory '{}' saved successfully as {}. Important: {}.", id, kind, is_important),
-                    is_error: false,
-                })
-            }
-            "delete" => {
-                if db.delete_memory(id).await? {
-                    Ok(ToolResult {
-                        tool_call_id: call.id,
-                        name: "memory_manage".into(),
-                        content: format!("Memory '{}' deleted.", id),
-                        is_error: false,
-                    })
-                } else {
-                    Ok(ToolResult {
-                        tool_call_id: call.id,
-                        name: "memory_manage".into(),
-                        content: format!("Memory '{}' not found.", id),
-                        is_error: true,
-                    })
-                }
-            }
-            "replace" => {
-                let brief = call.arguments["brief"].as_str().context("Missing brief for replace")?;
-                let content = call.arguments["content"].as_str();
-                let existing = db.get_memory(id).await?;
-                if let Some(m) = existing {
-                    db.save_memory(id, &m.kind, brief, content, is_important).await?;
-                    Ok(ToolResult {
-                        tool_call_id: call.id,
-                        name: "memory_manage".into(),
-                        content: format!("Memory '{}' replaced. Important: {}.", id, is_important),
-                        is_error: false,
-                    })
-                } else {
-                    bail!("Memory not found: {}", id);
-                }
-            }
-            "append" => {
-                let content_to_add = call.arguments["content"].as_str().context("Missing content for append")?;
-                let existing = db.get_memory(id).await?;
-                if let Some(m) = existing {
-                    let new_content = match m.content {
-                        Some(old) => format!("{}\n{}", old, content_to_add),
-                        None => content_to_add.to_string(),
-                    };
-                    db.save_memory(id, &m.kind, &m.brief, Some(&new_content), is_important).await?;
-                    Ok(ToolResult {
-                        tool_call_id: call.id,
-                        name: "memory_manage".into(),
-                        content: format!("Content appended to memory '{}'.", id),
-                        is_error: false,
-                    })
-                } else {
-                    bail!("Memory not found: {}", id);
-                }
-            }
-            _ => bail!("Unsupported action: {}", action),
+        if db.delete_memory(id).await? {
+            Ok(ToolResult {
+                tool_call_id: call.id,
+                name: "memory_delete".into(),
+                content: format!("Memory '{}' deleted successfully.", id),
+                is_error: false,
+            })
+        } else {
+            Ok(ToolResult {
+                tool_call_id: call.id,
+                name: "memory_delete".into(),
+                content: format!("Memory '{}' not found.", id),
+                is_error: true,
+            })
         }
     }
 }

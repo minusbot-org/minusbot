@@ -121,19 +121,19 @@ impl Tool for ScheduleListTool {
     }
 }
 
-/// Tool: schedule.abort
-pub struct ScheduleAbortTool;
+/// Tool: schedule_delete
+pub struct ScheduleDeleteTool;
 
 #[async_trait]
-impl Tool for ScheduleAbortTool {
+impl Tool for ScheduleDeleteTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
-            name: "schedule_abort".into(),
-            description: "Cancel a scheduled task.".into(),
+            name: "schedule_delete".into(),
+            description: "Cancel and delete a scheduled task.".into(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "id": { "type": "string", "description": "The ID of the task to cancel." }
+                    "id": { "type": "string", "description": "The ID of the task to delete." }
                 },
                 "required": ["id"]
             }),
@@ -152,15 +152,15 @@ impl Tool for ScheduleAbortTool {
         if scheduler.cancel_job(id).await? {
             Ok(ToolResult {
                 tool_call_id: call.id,
-                name: "schedule_abort".into(),
-                content: format!("Task '{}' cancelled.", id),
+                name: "schedule_delete".into(),
+                content: format!("Task '{}' deleted successfully.", id),
                 is_error: false,
             })
         } else {
             Ok(ToolResult {
                 tool_call_id: call.id,
-                name: "schedule_abort".into(),
-                content: format!("Task '{}' not found or already cancelled.", id),
+                name: "schedule_delete".into(),
+                content: format!("Task '{}' not found or already deleted.", id),
                 is_error: true,
             })
         }

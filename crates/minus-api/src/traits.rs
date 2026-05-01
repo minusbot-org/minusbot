@@ -120,8 +120,15 @@ pub struct CommandContext {
     pub tools: Arc<dyn MinusTools>,
     pub secrets: Arc<dyn MinusSecrets>,
     pub providers: Arc<dyn MinusProviders>,
+    pub scheduler: Arc<dyn MinusScheduler>,
     pub shutdown_trigger: Option<tokio::sync::mpsc::Sender<()>>,
     pub all_commands: Vec<CommandDefinition>,
+}
+
+#[async_trait]
+pub trait MinusScheduler: Send + Sync {
+    async fn list_tasks(&self) -> Result<Vec<SchedulerTask>>;
+    async fn delete_task(&self, id: &str) -> Result<bool>;
 }
 
 #[async_trait]
@@ -204,6 +211,8 @@ pub trait MinusDatabase: Send + Sync {
 
     // Memory management
     async fn list_memories(&self) -> Result<Vec<Memory>>;
+    async fn save_memory(&self, id: &str, kind: &str, brief: &str, content: Option<&str>, is_important: bool) -> Result<()>;
+    async fn delete_memory(&self, id: &str) -> Result<bool>;
 }
 
 pub struct FileConfigProvider {

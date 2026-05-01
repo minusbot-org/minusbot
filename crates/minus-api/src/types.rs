@@ -397,3 +397,13 @@ pub struct Memory {
     pub created_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SchedulerTask {
+    pub id: String,
+    pub name: String,
+    pub schedule: String,
+    pub action: String,
+    pub enabled: bool,
+    pub next_run: Option<DateTime<Utc>>,
+}
+

@@ -458,6 +458,25 @@ pub fn parse_duration_str(s: &str) -> Result<std::time::Duration> {
     Ok(std::time::Duration::from_secs(secs))
 }
 
+#[minus_api::async_trait]
+impl minus_api::traits::MinusScheduler for Scheduler {
+    async fn list_tasks(&self) -> Result<Vec<minus_api::SchedulerTask>> {
+        let jobs = self.list_jobs().await?;
+        Ok(jobs.into_iter().map(|j| minus_api::SchedulerTask {
+            id: j.id,
+            name: j.name,
+            schedule: j.schedule_expr,
+            action: j.action_kind,
+            enabled: j.enabled,
+            next_run: j.next_run_at.and_then(|s| DateTime::parse_from_rfc3339(&s).ok()).map(|d| d.with_timezone(&Utc)),
+        }).collect())
+    }
+
+    async fn delete_task(&self, id: &str) -> Result<bool> {
+        self.cancel_job(id).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
