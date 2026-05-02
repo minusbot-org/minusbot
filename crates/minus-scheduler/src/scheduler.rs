@@ -24,9 +24,12 @@ pub enum ScheduleKind {
 
 /// What the job does when triggered.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum JobAction {
-    AgentPrompt { prompt: String },
+    AgentPrompt { prompt: String, agent_id: Option<String> },
     MessageSend { content: String, generate: bool },
+    UseChat { chat_id: String, content: String },
+    AskAgent { chat_id: String, content: String, agent_id: String },
 }
 
 /// A triggered job event sent to the runtime.
@@ -34,7 +37,7 @@ pub enum JobAction {
 pub struct JobTrigger {
     pub job_id: String,
     pub job_name: String,
-    pub action: JobAction,
+    pub actions: Vec<JobAction>,
     pub target_chat_id: Option<String>,
 }
 
@@ -66,7 +69,6 @@ impl Scheduler {
         Ok(())
     }
 
-    /// Create a new job from parsed schedule and action.
     pub async fn create_job(
         &self,
         name: &str,
@@ -77,31 +79,29 @@ impl Scheduler {
         self.create_job_v2(
             name,
             schedule_str,
-            JobAction::AgentPrompt {
+            vec![JobAction::AgentPrompt {
                 prompt: prompt.to_string(),
-            },
+                agent_id: None,
+            }],
             target_chat_id,
         )
         .await
     }
 
-    /// Create a new job with a specific action.
+    /// Create a new job with specific actions.
     pub async fn create_job_v2(
         &self,
         name: &str,
         schedule_str: &str,
-        action: JobAction,
+        actions: Vec<JobAction>,
         target_chat_id: Option<&str>,
     ) -> Result<String> {
         let (kind, expr) = parse_schedule(schedule_str)?;
         let next_run = compute_next_run(&kind)?;
 
         let job_id = Uuid::new_v4().to_string();
-        let action_kind = match &action {
-            JobAction::AgentPrompt { .. } => "agent_prompt",
-            JobAction::MessageSend { .. } => "message_send",
-        };
-        let action_json = serde_json::to_string(&action)?;
+        let action_kind = "multi_action";
+        let action_json = serde_json::to_string(&actions)?;
         let next_run_str = next_run.map(|t| t.to_rfc3339());
 
         let (kind_str, expr_str) = match &kind {
@@ -181,16 +181,13 @@ impl Scheduler {
         job_id: &str,
         name: &str,
         schedule_str: &str,
-        action: JobAction,
+        actions: Vec<JobAction>,
     ) -> Result<()> {
         let (kind, expr) = parse_schedule(schedule_str)?;
         let next_run = compute_next_run(&kind)?;
 
-        let action_kind = match &action {
-            JobAction::AgentPrompt { .. } => "agent_prompt",
-            JobAction::MessageSend { .. } => "message_send",
-        };
-        let action_json = serde_json::to_string(&action)?;
+        let action_kind = "multi_action";
+        let action_json = serde_json::to_string(&actions)?;
         let next_run_str = next_run.map(|t| t.to_rfc3339());
 
         let (kind_str, expr_str) = match &kind {
@@ -320,20 +317,22 @@ impl Scheduler {
         for job in triggered {
             tracing::info!(job_id = %job.id, name = %job.name, "Triggering job");
 
-            let action: JobAction =
-                serde_json::from_str(&job.action_json).unwrap_or(JobAction::MessageSend {
-                    content: "Job triggered".into(),
+            let actions: Vec<JobAction> = serde_json::from_str(&job.action_json)
+                .or_else(|_| {
+                    // Fallback for single action
+                    serde_json::from_str::<JobAction>(&job.action_json).map(|a| vec![a])
+                })
+                .unwrap_or_else(|_| vec![JobAction::MessageSend {
+                    content: "Job triggered (invalid action format)".into(),
                     generate: false,
-                });
+                }]);
 
             let trigger = JobTrigger {
                 job_id: job.id.clone(),
                 job_name: job.name.clone(),
-                action,
+                actions,
                 target_chat_id: job.target_chat_id.clone(),
             };
-
-            tracing::info!(job_id = %job.id, action = ?trigger.action, "Triggering job");
 
             if let Err(e) = self.trigger_tx.send(trigger).await {
                 tracing::error!(error = %e, "Failed to send job trigger");

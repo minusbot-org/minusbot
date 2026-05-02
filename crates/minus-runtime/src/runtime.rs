@@ -75,7 +75,7 @@ impl Runtime {
             anyhow::bail!("Slash commands must be processed via process_command: {}", msg.content);
         }
 
-        runtime.agent.handle_message(msg, channel).await
+        runtime.agent.clone().handle_message(msg, channel).await
     }
 
     /// Register a config provider (e.g., from a channel or provider)

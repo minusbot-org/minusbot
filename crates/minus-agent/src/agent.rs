@@ -1,4 +1,5 @@
-use anyhow::Result;
+use crate::registry;
+use anyhow::{Context, Result};
 use minus_api::*;
 use minus_db::Database;
 use minus_env::{AppConfig, SecretsManager};
@@ -24,6 +25,8 @@ pub struct Agent {
     skills: Arc<SkillManager>,
     policy: Arc<PolicyEngine>,
     scheduler: Arc<minus_scheduler::Scheduler>,
+    pub registry: Arc<registry::AgentRegistry>,
+    pub channels: Arc<RwLock<Option<std::sync::Weak<dyn MinusChannels>>>>,
     config_dir: std::path::PathBuf,
 }
 
@@ -38,6 +41,7 @@ impl Agent {
         skills: Arc<SkillManager>,
         policy: Arc<PolicyEngine>,
         scheduler: Arc<minus_scheduler::Scheduler>,
+        registry: Arc<registry::AgentRegistry>,
         config_dir: std::path::PathBuf,
     ) -> Self {
         Self {
@@ -50,20 +54,33 @@ impl Agent {
             skills,
             policy,
             scheduler,
+            registry,
+            channels: Arc::new(RwLock::new(None)),
             config_dir,
         }
     }
 
     /// Handle an incoming message and produce a response.
     pub async fn handle_message(
-        &self,
+        self: Arc<Self>,
         incoming: &IncomingMessage,
         channel: Arc<dyn traits::Channel>,
+    ) -> Result<String> {
+        self.handle_message_with_agent("default", incoming, Some(channel)).await
+    }
+
+    pub async fn handle_message_with_agent(
+        self: Arc<Self>,
+        agent_id: &str,
+        incoming: &IncomingMessage,
+        channel: Option<Arc<dyn traits::Channel>>,
     ) -> Result<String> {
         let chat_id = &incoming.chat_id.0;
         
         // Show typing indicator
-        let _ = channel.set_typing(incoming.chat_id.clone(), true).await;
+        if let Some(ref ch) = channel {
+            let _ = ch.set_typing(incoming.chat_id.clone(), true).await;
+        }
 
         // 1. Ensure chat exists
         self.db
@@ -114,7 +131,9 @@ impl Agent {
         let date_str = now.format("%Y-%m-%d").to_string();
         let time_str = now.format("%H:%M:%S").to_string();
 
-        let mut system_prompt = {
+        let mut system_prompt = if let Some(agent) = self.registry.get(agent_id).await {
+            agent.system_prompt
+        } else {
             let custom_prompt_path = self.config_dir.join("system_prompt.txt");
             if custom_prompt_path.exists() {
                 std::fs::read_to_string(custom_prompt_path).unwrap_or_else(|_| include_str!("system_prompt.txt").to_string())
@@ -282,12 +301,14 @@ impl Agent {
                 for tc in &response.tool_calls {
                     tracing::info!(tool = %tc.name, "Executing tool call");
                     
-                    let _ = channel.send_tool_call(ToolCallPacket {
-                        chat_id: incoming.chat_id.clone(),
-                        call_id: tc.id.clone(),
-                        name: tc.name.clone(),
-                        brief: String::new(), // TODO: Add actual brief if needed
-                    }).await;
+                    if let Some(ref ch) = channel {
+                        let _ = ch.send_tool_call(ToolCallPacket {
+                            chat_id: incoming.chat_id.clone(),
+                            call_id: tc.id.clone(),
+                            name: tc.name.clone(),
+                            brief: String::new(), // TODO: Add actual brief if needed
+                        }).await;
+                    }
 
                     // Policy check
                     let tool_decision = self.policy.evaluate(&PolicyAction::ToolCall {
@@ -295,12 +316,18 @@ impl Agent {
                     });
                     
                     let result = if tool_decision.is_allowed() {
+                        let channels = self.channels.read().await.as_ref()
+                            .and_then(|w| w.upgrade())
+                            .context("Channels service not available in agent")?;
+
                         let ctx = ToolContext {
                             chat_id: incoming.chat_id.clone(),
                             channel_id: incoming.channel_id.clone(),
                             component_id: ComponentId::new("agent"),
                             db: self.db.clone() as Arc<dyn MinusDatabase>,
                             scheduler: self.scheduler.clone() as Arc<dyn MinusScheduler>,
+                            channels,
+                            agent: self.clone() as Arc<dyn MinusAgent>,
                         };
                         tools_lock.execute(tc.clone(), ctx).await?
                     } else {
@@ -354,5 +381,22 @@ impl Agent {
 
             return Ok(final_content);
         }
+    }
+}
+
+#[async_trait]
+impl traits::MinusAgent for Agent {
+    async fn list_agents(self: Arc<Self>) -> Result<Vec<AgentStatus>> {
+        let agents = self.registry.list().await;
+        Ok(agents.into_iter().map(|a| AgentStatus {
+            id: a.id,
+            name: a.name,
+            description: None,
+        }).collect())
+    }
+
+    async fn call_agent(self: Arc<Self>, agent_id: &str, content: &str, chat_id: ChatId, channel_id: ChannelId) -> Result<String> {
+        let incoming = IncomingMessage::new(chat_id, channel_id, content.to_string());
+        self.handle_message_with_agent(agent_id, &incoming, None).await
     }
 }

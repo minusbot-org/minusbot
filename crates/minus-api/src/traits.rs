@@ -3,6 +3,7 @@ use crate::events::*;
 use crate::permissions::*;
 use anyhow::Result;
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 // =============================================================================
@@ -124,6 +125,8 @@ pub struct ToolContext {
     pub component_id: ComponentId,
     pub db: Arc<dyn MinusDatabase>,
     pub scheduler: Arc<dyn MinusScheduler>,
+    pub channels: Arc<dyn MinusChannels>,
+    pub agent: Arc<dyn MinusAgent>,
 }
 
 pub struct CommandContext {
@@ -213,6 +216,19 @@ pub trait MinusSecrets: Send + Sync {
 #[async_trait]
 pub trait MinusTools: Send + Sync {
     async fn list_tools(&self) -> Vec<ToolDefinition>;
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentStatus {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[async_trait]
+pub trait MinusAgent: Send + Sync {
+    async fn list_agents(self: Arc<Self>) -> Result<Vec<AgentStatus>>;
+    async fn call_agent(self: Arc<Self>, agent_id: &str, content: &str, chat_id: ChatId, channel_id: ChannelId) -> Result<String>;
 }
 
 #[async_trait]

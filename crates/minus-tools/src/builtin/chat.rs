@@ -149,3 +149,95 @@ impl Tool for ChatSearchTool {
         })
     }
 }
+
+/// Tool: chat_send
+pub struct ChatSendTool;
+
+#[async_trait]
+impl Tool for ChatSendTool {
+    fn definition(&self) -> ToolDefinition {
+        ToolDefinition {
+            name: "chat_send".into(),
+            description: "Send a message to a specific chat ID (broadcasts to all active channels for that chat).".into(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "chat_id": { "type": "string", "description": "The target chat ID" },
+                    "content": { "type": "string", "description": "The message content to send" }
+                },
+                "required": ["chat_id", "content"]
+            }),
+            risk: ToolRisk::Medium,
+            side_effect: true,
+        }
+    }
+
+    async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
+        let chat_id = call.arguments["chat_id"].as_str().context("Missing chat_id")?;
+        let content = call.arguments["content"].as_str().context("Missing content")?;
+        let target_chat_id = minus_api::ChatId(chat_id.to_string());
+
+        let packet = minus_api::MessagePacket::new(target_chat_id.clone(), "assistant", content);
+        
+        let statuses = ctx.channels.list_channels().await;
+        let mut sent_count = 0;
+        for status in statuses {
+            if let Some(channel) = ctx.channels.get_channel(&status.id).await {
+                if channel.is_chat_active(target_chat_id.clone()).await {
+                    let _ = channel.send_message(packet.clone()).await;
+                    sent_count += 1;
+                }
+            }
+        }
+
+        Ok(ToolResult {
+            tool_call_id: call.id,
+            name: "chat_send".into(),
+            content: format!("Message sent to {} channels for chat {}", sent_count, chat_id),
+            is_error: false,
+        })
+    }
+}
+
+/// Tool: chat_reply
+pub struct ChatReplyTool;
+
+#[async_trait]
+impl Tool for ChatReplyTool {
+    fn definition(&self) -> ToolDefinition {
+        ToolDefinition {
+            name: "chat_reply".into(),
+            description: "Send a response message to the current chat.".into(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "content": { "type": "string", "description": "The message content to send" }
+                },
+                "required": ["content"]
+            }),
+            risk: ToolRisk::Medium,
+            side_effect: true,
+        }
+    }
+
+    async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
+        let content = call.arguments["content"].as_str().context("Missing content")?;
+        let packet = minus_api::MessagePacket::new(ctx.chat_id.clone(), "assistant", content);
+        
+        let statuses = ctx.channels.list_channels().await;
+        for status in statuses {
+            if let Some(channel) = ctx.channels.get_channel(&status.id).await {
+                if channel.is_chat_active(ctx.chat_id.clone()).await {
+                    let _ = channel.send_message(packet.clone()).await;
+                }
+            }
+        }
+
+        Ok(ToolResult {
+            tool_call_id: call.id,
+            name: "chat_reply".into(),
+            content: "Reply sent.".into(),
+            is_error: false,
+        })
+    }
+}
