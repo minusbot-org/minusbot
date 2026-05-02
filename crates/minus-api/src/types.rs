@@ -61,6 +61,12 @@ impl std::fmt::Display for JobId {
     }
 }
 
+impl std::fmt::Display for ChannelId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 // =============================================================================
 // Messages
 // =============================================================================

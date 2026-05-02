@@ -16,6 +16,7 @@ members = [
     "crates/minus-tools",
     "crates/minus-vault",
     "channels/minus-channel-cli",
+    "channels/minus-channel-telegram",
     "providers/minus-provider-openai",
     "providers/minus-provider-openrouter",
 ]

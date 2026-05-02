@@ -10,7 +10,7 @@ impl Command for ChannelsCommand {
         CommandDefinition {
             name: "channels".into(),
             description: "Manage communication channels.".into(),
-            usage: "/channels <list|enable|disable|config> [args]".into(),
+            usage: "/channels <list|enable|disable|config|setup> [args]".into(),
             category: "system".into(),
             aliases: vec!["chan".into()],
             min_args: 0,
@@ -87,7 +87,16 @@ impl Command for ChannelsCommand {
                     _ => bail!("Unknown config operation: {}. Use list, get, or set.", op),
                 }
             }
-            _ => bail!("Unknown subcommand: {}. Use list, enable, disable, or config.", subcommand),
+            "setup" => {
+                let id = args.get(1).context("Missing channel ID: /channels setup <id>")?;
+                let chan = ctx.channels.get_channel(id).await.context("Channel not found")?;
+                if !chan.has_available_setup() {
+                    return Ok(format!("Channel '{}' does not support setup.", id));
+                }
+                let pin = chan.setup().await?;
+                Ok(format!("Setup initiated for channel '{}'.\nUse the following PIN: {}", id, pin))
+            }
+            _ => bail!("Unknown subcommand: {}. Use list, enable, disable, config, or setup.", subcommand),
         }
     }
 }

@@ -32,12 +32,18 @@ pub trait Channel: Send + Sync {
     async fn send_notification(&self, packet: NotificationPacket) -> Result<()>;
     async fn send_tool_call(&self, packet: ToolCallPacket) -> Result<()>;
     async fn send_command_feedback(&self, feedback: CommandFeedback) -> Result<()>;
+    async fn set_typing(&self, _chat_id: ChatId, _flag: bool) -> Result<()> { Ok(()) }
+    async fn is_chat_active(&self, _chat_id: ChatId) -> bool { false }
     
     // Platform features
     async fn register_commands(&self, _commands: Vec<CommandDefinition>) -> Result<()> { Ok(()) }
 
     // Events (Informing channel about state changes)
     async fn on_chat_switch(&self, _chat_id: &ChatId, _messages: Vec<Message>) -> Result<()> { Ok(()) }
+
+    // Setup and Whitelisting
+    fn has_available_setup(&self) -> bool { false }
+    async fn setup(&self) -> Result<String> { anyhow::bail!("Setup not supported for this channel") }
 
     fn config(&self) -> Option<Arc<dyn ConfigProvider>> {
         None

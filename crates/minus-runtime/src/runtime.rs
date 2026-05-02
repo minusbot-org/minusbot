@@ -187,7 +187,11 @@ impl MinusSecrets for Runtime {
     async fn get_store(&self, component_id: &str) -> Result<Arc<dyn MinusSecretStore>> {
         let vault = self.vault.clone()
             .ok_or_else(|| anyhow::anyhow!("Vault not initialized"))?;
-        let prefix = format!("{}:", component_id);
+        let prefix = if component_id.is_empty() {
+            "".to_string()
+        } else {
+            format!("{}:", component_id)
+        };
         Ok(Arc::new(SubVault::new(vault, prefix)))
     }
 

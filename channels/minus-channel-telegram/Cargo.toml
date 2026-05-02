@@ -1,0 +1,17 @@
+[package]
+name = "minus-channel-telegram"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+minus-api = { version = "0.1.0", path = "../../crates/minus-api" }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+futures = { workspace = true }
+rand = { workspace = true }
+teloxide = { version = "0.13", features = ["macros"] }
+arc-swap = "1.6"

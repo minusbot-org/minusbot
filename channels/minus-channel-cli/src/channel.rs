@@ -196,6 +196,19 @@ impl Channel for CliChannel {
         Ok(())
     }
 
+    async fn is_chat_active(&self, chat_id: ChatId) -> bool {
+        // Check active_chat_id
+        if let Some(active) = self.active_chat_id.read().await.as_ref() {
+            if active.0 == chat_id.0 {
+                return true;
+            }
+        }
+        
+        // Check active streams
+        let streams = self.active_streams.lock().await;
+        streams.iter().any(|(cid, _)| cid.0 == chat_id.0)
+    }
+
     async fn start(&self, ctx: ChannelContext) -> Result<()> {
         {
             let mut context = self.context.write().await;

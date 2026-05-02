@@ -61,6 +61,9 @@ impl Agent {
         channel: Arc<dyn traits::Channel>,
     ) -> Result<String> {
         let chat_id = &incoming.chat_id.0;
+        
+        // Show typing indicator
+        let _ = channel.set_typing(incoming.chat_id.clone(), true).await;
 
         // 1. Ensure chat exists
         self.db
