@@ -1,4 +1,4 @@
-use minus_core::{ComponentId, PolicyDecision};
+use minus_api::{PolicyAction, PolicyDecision, MinusPolicy};
 use minus_env::AppConfig;
 
 /// The policy engine evaluates whether actions are permitted.
@@ -6,33 +6,14 @@ pub struct PolicyEngine {
     config: AppConfig,
 }
 
-/// Describes what action is being requested.
-#[derive(Debug, Clone)]
-pub enum PolicyAction {
-    ToolCall { tool_name: String },
-    EnvSet { key: String },
-    EnvGet { key: String },
-    VaultGet { key: String, requester: ComponentId },
-    VaultPut { key: String },
-    JobCreate,
-    JobDelete,
-    MessageSend,
-    NetworkHttp { host: String },
-    ShellExec,
-    FilesystemRead { path: String },
-    FilesystemWrite { path: String },
-    ProviderCall { provider_id: String },
-    IntegrationCall { integration_id: String },
-    ChannelSend { channel_id: String },
-}
-
 impl PolicyEngine {
     pub fn new(config: AppConfig) -> Self {
         Self { config }
     }
+}
 
-    /// Evaluate a policy decision for the given action.
-    pub fn evaluate(&self, action: &PolicyAction) -> PolicyDecision {
+impl MinusPolicy for PolicyEngine {
+    fn evaluate(&self, action: &PolicyAction) -> PolicyDecision {
         match action {
             PolicyAction::ToolCall { tool_name } => {
                 tracing::debug!(tool = %tool_name, "Policy: tool call");
@@ -88,8 +69,6 @@ impl PolicyEngine {
                 if self.config.security.allow_filesystem_write_outside_drive {
                     PolicyDecision::Allow
                 } else {
-                    // Only allow writes to drive directory
-                    // The caller must verify the path is within drive
                     tracing::debug!(path = %path, "Policy: filesystem write");
                     PolicyDecision::Allow
                 }

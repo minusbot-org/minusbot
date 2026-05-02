@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use minus_core::{Provider, ProviderRequest, ProviderResponse};
+use minus_api::{Provider, ProviderRequest, ProviderResponse};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -135,5 +135,9 @@ impl minus_api::traits::MinusProviders for ProviderRegistry {
     }
     async fn set_default_text_model(&self, _model: &str) -> Result<()> {
         anyhow::bail!("Cannot set default model on immutable registry.")
+    }
+    async fn resolve_api_key(&self, _provider_id: &str) -> Result<Option<String>> {
+        // The registry doesn't have vault access — the Runtime's impl handles this.
+        Ok(None)
     }
 }

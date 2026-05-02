@@ -475,6 +475,10 @@ impl minus_api::traits::MinusScheduler for Scheduler {
     async fn delete_task(&self, id: &str) -> Result<bool> {
         self.cancel_job(id).await
     }
+
+    async fn create_task(&self, name: &str, schedule: &str, prompt: &str, target_chat_id: Option<&str>) -> Result<String> {
+        self.create_job(name, schedule, prompt, target_chat_id).await
+    }
 }
 
 #[cfg(test)]

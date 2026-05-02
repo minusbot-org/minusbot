@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use minus_core::*;
+use minus_api::*;
 use std::sync::Arc;
 
 /// OpenRouter provider — wraps the OpenAI-compatible provider with OpenRouter's base URL.

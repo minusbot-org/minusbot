@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-minus-core = { path = "../minus-core" }
+minus-api = { path = "../minus-api" }
 minus-db = { path = "../minus-db" }
 minus-env = { path = "../minus-env" }
 minus-providers = { path = "../minus-providers" }

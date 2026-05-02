@@ -1,7 +1,7 @@
 use anyhow::Result;
 use minus_agent::Agent;
 use minus_channel_cli::CliChannel;
-use minus_core::*;
+use minus_api::*;
 use minus_db::Database;
 use minus_env::{AppConfig, DataDir, SecretsManager};
 use minus_policy::PolicyEngine;
@@ -74,14 +74,14 @@ async fn main() -> Result<()> {
     }
     let config = Arc::new(RwLock::new(config_raw.clone()));
 
+    // 3. Load secrets
+    let secrets = SecretsManager::load(&data_dir.secrets_env_path())?;
+    let secrets = Arc::new(RwLock::new(secrets));
 
-    // 4. Load secrets
-    let _secrets_raw = SecretsManager::load(&data_dir.secrets_env_path())?;
-
-    // 5. Open database
+    // 4. Open database
     let db = Database::open(&data_dir.database_url()).await?;
 
-    // 6. Initialize vault
+    // 5. Initialize vault
     let vault = match Vault::open(&data_dir.vault_dir()) {
         Ok(v) => Some(Arc::new(v)),
         Err(e) => {
@@ -90,16 +90,13 @@ async fn main() -> Result<()> {
         }
     };
 
-    let secrets = SecretsManager::load(&data_dir.secrets_env_path())?;
-    let secrets = Arc::new(RwLock::new(secrets));
-
-    // 7. Policy engine
+    // 6. Policy engine
     let policy = {
         let cfg = config.read().await;
         Arc::new(PolicyEngine::new(cfg.clone()))
     };
 
-    // 8. Provider registry
+    // 7. Provider registry
     let mut provider_reg = ProviderRegistry::new();
     {
         let sec = secrets.read().await;
@@ -139,7 +136,7 @@ async fn main() -> Result<()> {
             provider_reg.set_default_model(&model);
         }
 
-        // Print startup banner now that we have provider and model
+        // Print startup banner
         let provider_display = provider_reg.default_id().unwrap_or("(none)");
         let model_display = provider_reg.default_model().unwrap_or("(none)");
 
@@ -162,25 +159,25 @@ async fn main() -> Result<()> {
     }
     let providers = Arc::new(RwLock::new(provider_reg));
 
-    // 9. Tool registry
+    // 8. Tool registry
     let mut tool_reg = ToolRegistry::new();
     for tool in minus_tools::builtin::all_builtin_tools() {
         tool_reg.register(tool);
     }
     let tools = Arc::new(RwLock::new(tool_reg));
 
-    // 10. Skills manager
+    // 9. Skills manager
     let skills = Arc::new(SkillManager::new(data_dir.skills_dir(), db.clone()));
     skills.scan_and_index().await?;
 
-    // 11. Scheduler
+    // 10. Scheduler
     let (job_tx, mut job_rx) = mpsc::channel::<minus_scheduler::JobTrigger>(64);
     let scheduler = Arc::new(Scheduler::new(db.clone(), job_tx));
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::broadcast::channel::<()>(1);
     scheduler.clone().start(shutdown_rx);
 
-    // 12. Agent
+    // 11. Agent
     let agent = Arc::new(Agent::new(
         db.clone(),
         config.clone(),
@@ -194,28 +191,12 @@ async fn main() -> Result<()> {
         data_dir.config_dir(),
     ));
 
-    // 12. Integrations registry
-    let mut integration_reg = minus_integrations::IntegrationRegistry::new();
-    integration_reg.register(Arc::new(minus_integrations::DemoIntegration));
-    let integrations = Arc::new(integration_reg);
-
-    // 13. Commands registry
+    // 12. Commands registry
     let mut command_reg = minus_commands::CommandRegistry::new();
     minus_commands::builtin::register_all(&mut command_reg);
-    
-    // Register commands from integrations
-    for integration in integrations.all() {
-        for def in integration.commands() {
-            command_reg.register(Arc::new(minus_commands::registry::IntegrationCommand {
-                integration: integration.clone(),
-                def,
-            }));
-        }
-    }
-    
     let commands = Arc::new(RwLock::new(command_reg));
 
-    // 14. Build Runtime
+    // 13. Build Runtime
     let runtime = Arc::new(Runtime {
         db: db.clone(),
         config: config.clone(),
@@ -230,29 +211,24 @@ async fn main() -> Result<()> {
         scheduler,
         agent,
         commands,
-        config_providers: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
-        channels: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+        config_providers: Arc::new(RwLock::new(std::collections::HashMap::new())),
+        channels: Arc::new(RwLock::new(std::collections::HashMap::new())),
+        integrations: Arc::new(RwLock::new(Vec::new())),
         shutdown_tx: shutdown_tx.clone(),
     });
 
-
-
-    // 15. Start CLI channel
+    // 14. Start CLI channel
     let (msg_tx, mut msg_rx) = mpsc::channel::<IncomingMessage>(64);
     let config_dir = data_dir.root.join("config");
-    let cli_channel = Arc::new(CliChannel::new(msg_tx, config_dir.clone(), db.clone()));
+    let cli_channel = Arc::new(CliChannel::new(msg_tx, config_dir.clone()));
     
-    // Register as config provider and in channel registry
-    runtime.register(cli_channel.clone()).await;
-    {
-        let mut channels = runtime.channels.write().await;
-        channels.insert(minus_core::Channel::id(cli_channel.as_ref()).to_string(), cli_channel.clone());
-    }
+    // Register channel via Runtime's register method
+    runtime.register_channel(cli_channel.clone()).await;
 
     // Spawn CLI listener
     let chan = cli_channel.clone();
     let ctx = ChannelContext {
-        channel_id: ChannelId(minus_core::Channel::id(chan.as_ref()).to_string()),
+        channel_id: ChannelId(minus_api::Channel::id(chan.as_ref()).to_string()),
         config_dir: data_dir.config_dir(),
     };
     let chan_handle = tokio::spawn(async move {
@@ -261,7 +237,7 @@ async fn main() -> Result<()> {
         }
     });
 
-    // 16. Main message loop
+    // 15. Main message loop
     let mut shutdown_rx2 = shutdown_tx.subscribe();
 
     loop {

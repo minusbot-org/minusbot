@@ -1,4 +1,4 @@
-use minus_core::{Tool, ToolCall, ToolContext, ToolDefinition, ToolResult};
+use minus_api::{Tool, ToolCall, ToolContext, ToolDefinition, ToolResult};
 use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;

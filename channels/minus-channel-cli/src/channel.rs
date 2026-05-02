@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use minus_core::*;
+use minus_api::*;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 #[cfg(unix)]
@@ -44,7 +44,6 @@ pub struct CliChannel {
     message_tx: mpsc::Sender<IncomingMessage>,
     active_streams: Arc<Mutex<Vec<(ChatId, mpsc::Sender<String>)>>>,
     config: Arc<dyn ConfigProvider>,
-    db: minus_db::Database,
     enabled: Arc<std::sync::atomic::AtomicBool>,
     active_chat_id: Arc<RwLock<Option<ChatId>>>,
     context: Arc<RwLock<Option<ChannelContext>>>,
@@ -54,7 +53,6 @@ impl CliChannel {
     pub fn new(
         message_tx: mpsc::Sender<IncomingMessage>,
         config_dir: std::path::PathBuf,
-        db: minus_db::Database,
     ) -> Self {
         let config_path = config_dir.join("channel-cli.toml");
         let config = Arc::new(FileConfigProvider::new("channel.cli", config_path));
@@ -63,7 +61,6 @@ impl CliChannel {
             message_tx,
             active_streams: Arc::new(Mutex::new(Vec::new())),
             config,
-            db,
             enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             active_chat_id: Arc::new(RwLock::new(Some(ChatId("cli:default".into())))),
             context: Arc::new(RwLock::new(None)),
@@ -108,7 +105,6 @@ impl CliChannel {
             let req: CliRequest = match serde_json::from_str(&line) {
                 Ok(r) => r,
                 Err(_) => {
-                    // Fallback to raw line if not JSON
                     CliRequest {
                         chat_id: current_chat_id.0.clone(),
                         content: line,
@@ -128,12 +124,10 @@ impl CliChannel {
             // If chat_id changed, update our registration
             if req.chat_id != current_chat_id.0 {
                 let mut streams = active_streams_inner.lock().await;
-                // Remove old registration
                 streams
                     .retain(|(cid, tx)| !(cid.0 == current_chat_id.0 && tx.same_channel(&resp_tx)));
 
                 current_chat_id = ChatId(req.chat_id.clone());
-                // Add new registration
                 streams.push((current_chat_id.clone(), resp_tx.clone()));
             }
 
@@ -167,7 +161,6 @@ impl CliChannel {
 }
 
 #[async_trait]
-#[async_trait]
 impl Channel for CliChannel {
     fn id(&self) -> &'static str { "cli" }
     fn name(&self) -> &'static str { "CLI Channel" }
@@ -179,7 +172,6 @@ impl Channel for CliChannel {
     async fn set_enabled(&self, flag: bool) -> Result<bool> {
         let old = self.enabled.swap(flag, std::sync::atomic::Ordering::Relaxed);
         if old != flag {
-            // Lifecycle handled by main.rs loop
             Ok(true)
         } else {
             Ok(false)
@@ -211,7 +203,6 @@ impl Channel for CliChannel {
 
         let is_windows = cfg!(target_os = "windows");
 
-        // Default values
         let (protocol, secret): (CliProtocol, Option<String>) = if is_windows {
             let port = 10000;
             let addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
@@ -338,25 +329,17 @@ impl Channel for CliChannel {
         })).await
     }
 
-    async fn on_chat_switch(&self, chat_id: &ChatId) -> Result<()> {
-        let messages = self.db.get_messages(&chat_id.0, 50).await?;
+    async fn on_chat_switch(&self, chat_id: &ChatId, messages: Vec<Message>) -> Result<()> {
         let packet = CliPacket::ChatHistory {
             chat_id: chat_id.clone(),
-            messages: messages.into_iter().map(|m| Message {
-                id: m.id,
-                chat_id: m.chat_id,
-                role: m.role,
-                content: m.content,
-                metadata_json: m.metadata_json,
-                created_at: m.created_at,
-            }).collect(),
+            messages,
         };
         self.broadcast(chat_id, packet).await
     }
 }
 
 #[async_trait]
-impl minus_api::traits::ConfigProvider for CliChannel {
+impl ConfigProvider for CliChannel {
     fn id(&self) -> &'static str {
         self.config.id()
     }

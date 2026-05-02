@@ -109,6 +109,9 @@ impl minus_api::traits::MinusDatabase for Database {
             created_at: r.created_at,
         }).collect())
     }
+    async fn save_message(&self, id: &str, chat_id: &str, role: &str, content: &str, metadata: Option<&str>) -> Result<()> {
+        self.save_message(id, chat_id, role, content, metadata).await
+    }
     async fn delete_messages(&self, chat_id: &str) -> Result<()> {
         self.delete_messages(chat_id).await
     }
@@ -129,6 +132,18 @@ impl minus_api::traits::MinusDatabase for Database {
 
     async fn list_memories(&self) -> Result<Vec<minus_api::Memory>> {
         let records = self.list_memories().await?;
+        Ok(records.into_iter().map(|r| minus_api::Memory {
+            id: r.id,
+            kind: r.kind,
+            brief: r.brief,
+            content: r.content,
+            is_important: r.is_important,
+            created_at: chrono::DateTime::parse_from_rfc3339(&r.created_at).unwrap_or_default().with_timezone(&chrono::Utc),
+        }).collect())
+    }
+
+    async fn get_important_memories(&self) -> Result<Vec<minus_api::Memory>> {
+        let records = self.get_important_memories().await?;
         Ok(records.into_iter().map(|r| minus_api::Memory {
             id: r.id,
             kind: r.kind,

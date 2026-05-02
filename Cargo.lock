@@ -1174,24 +1174,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
-name = "minus-addons"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "minus-core",
- "serde",
- "serde_json",
- "toml",
- "tracing",
-]
-
-[[package]]
 name = "minus-agent"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "minus-core",
+ "minus-api",
  "minus-db",
  "minus-env",
  "minus-policy",
@@ -1230,8 +1218,6 @@ dependencies = [
  "chrono",
  "futures",
  "minus-api",
- "minus-core",
- "minus-db",
  "rand",
  "serde",
  "serde_json",
@@ -1242,31 +1228,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "minus-channels"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "minus-core",
- "tracing",
-]
-
-[[package]]
 name = "minus-commands"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
  "minus-api",
- "minus-core",
  "serde",
  "tracing",
-]
-
-[[package]]
-name = "minus-core"
-version = "0.1.0"
-dependencies = [
- "minus-api",
 ]
 
 [[package]]
@@ -1276,7 +1245,6 @@ dependencies = [
  "anyhow",
  "chrono",
  "minus-api",
- "minus-core",
  "serde",
  "serde_json",
  "sqlx",
@@ -1294,7 +1262,6 @@ dependencies = [
  "chrono",
  "dirs",
  "dotenvy",
- "minus-core",
  "once_cell",
  "serde",
  "serde_json",
@@ -1305,50 +1272,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "minus-integrations"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "minus-core",
- "rand",
- "serde",
- "serde_json",
- "tracing",
-]
-
-[[package]]
-name = "minus-lua"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "minus-core",
- "tracing",
-]
-
-[[package]]
-name = "minus-memory"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "minus-core",
- "minus-db",
- "serde",
- "serde_json",
- "sqlx",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "minus-policy"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "minus-core",
+ "minus-api",
  "minus-env",
  "serde",
  "serde_json",
@@ -1361,7 +1289,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "minus-core",
+ "minus-api",
  "reqwest",
  "serde",
  "serde_json",
@@ -1374,7 +1302,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "minus-core",
+ "minus-api",
  "minus-provider-openai",
  "reqwest",
  "serde",
@@ -1389,7 +1317,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "minus-api",
- "minus-core",
  "serde",
  "serde_json",
  "tracing",
@@ -1401,16 +1328,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "minus-addons",
  "minus-agent",
  "minus-api",
- "minus-channels",
  "minus-commands",
- "minus-core",
  "minus-db",
  "minus-env",
- "minus-integrations",
- "minus-memory",
  "minus-policy",
  "minus-providers",
  "minus-scheduler",
@@ -1419,9 +1341,7 @@ dependencies = [
  "minus-vault",
  "serde",
  "serde_json",
- "sqlx",
  "tokio",
- "toml",
  "tracing",
  "uuid",
 ]
@@ -1434,7 +1354,6 @@ dependencies = [
  "chrono",
  "cron",
  "minus-api",
- "minus-core",
  "minus-db",
  "serde",
  "serde_json",
@@ -1449,7 +1368,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "minus-core",
+ "minus-api",
  "minus-db",
  "serde",
  "serde_json",
@@ -1463,14 +1382,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "chrono",
- "minus-core",
- "minus-db",
- "minus-scheduler",
+ "minus-api",
  "serde",
  "serde_json",
+ "tokio",
  "tracing",
- "uuid",
 ]
 
 [[package]]
@@ -1482,7 +1398,7 @@ dependencies = [
  "base64",
  "chrono",
  "machine-uid",
- "minus-core",
+ "minus-api",
  "minus-db",
  "rand",
  "serde",
@@ -1514,15 +1430,12 @@ name = "minusd"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "minus-addons",
  "minus-agent",
+ "minus-api",
  "minus-channel-cli",
  "minus-commands",
- "minus-core",
  "minus-db",
  "minus-env",
- "minus-integrations",
- "minus-memory",
  "minus-policy",
  "minus-provider-openai",
  "minus-provider-openrouter",
@@ -1532,7 +1445,6 @@ dependencies = [
  "minus-skills",
  "minus-tools",
  "minus-vault",
- "rand",
  "serde",
  "serde_json",
  "tokio",

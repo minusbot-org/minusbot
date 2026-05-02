@@ -1,10 +1,9 @@
 use anyhow::{Result, Context};
 use async_trait::async_trait;
-use minus_core::{Tool, ToolCall, ToolContext, ToolDefinition, ToolResult, ToolRisk};
-use minus_db::Database;
+use minus_api::{Tool, ToolCall, ToolContext, ToolDefinition, ToolResult, ToolRisk};
 use serde_json::json;
 
-/// Tool: chat.list
+/// Tool: chat_list
 pub struct ChatListTool;
 
 #[async_trait]
@@ -24,11 +23,7 @@ impl Tool for ChatListTool {
     }
 
     async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
-        let db = ctx.store.as_ref()
-            .and_then(|s| s.downcast_ref::<Database>())
-            .context("Database not found in ToolContext")?;
-        
-        let chats = db.list_chats().await?;
+        let chats = ctx.db.list_chats().await?;
         let content = if chats.is_empty() {
             "No chats found.".into()
         } else {
@@ -47,7 +42,7 @@ impl Tool for ChatListTool {
     }
 }
 
-/// Tool: chat.read
+/// Tool: chat_read
 pub struct ChatReadTool;
 
 #[async_trait]
@@ -70,14 +65,10 @@ impl Tool for ChatReadTool {
     }
 
     async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
-        let db = ctx.store.as_ref()
-            .and_then(|s| s.downcast_ref::<Database>())
-            .context("Database not found in ToolContext")?;
-        
         let chat_id = call.arguments["chat_id"].as_str().context("Missing chat_id")?;
         let limit = call.arguments["limit"].as_i64().unwrap_or(20);
 
-        let messages = db.get_messages(chat_id, limit).await?;
+        let messages = ctx.db.get_messages(chat_id, limit).await?;
         let content = if messages.is_empty() {
             "No messages found in this chat.".into()
         } else {
@@ -96,7 +87,7 @@ impl Tool for ChatReadTool {
     }
 }
 
-/// Tool: chat.search
+/// Tool: chat_search — searches messages across all chats
 pub struct ChatSearchTool;
 
 #[async_trait]
@@ -123,25 +114,28 @@ impl Tool for ChatSearchTool {
     }
 
     async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
-        let db = ctx.store.as_ref()
-            .and_then(|s| s.downcast_ref::<Database>())
-            .context("Database not found in ToolContext")?;
-        
         let terms: Vec<String> = call.arguments["terms"].as_array()
             .context("Missing terms")?
             .iter()
-            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .filter_map(|v| v.as_str().map(|s| s.to_lowercase()))
             .collect();
-        let limit = call.arguments["limit"].as_i64().unwrap_or(20);
 
-        // We'll need a search_messages in Database. I'll implement it later or use a generic query here.
-        // For now, let's implement a basic search in minus-db.
-        
-        let results = db.search_messages(&terms, limit).await?;
+        // Fetch recent messages from all chats and filter client-side
+        let chats = ctx.db.list_chats().await?;
+        let mut results = Vec::new();
+        for chat in &chats {
+            let messages = ctx.db.get_messages(&chat.id, 100).await?;
+            for m in messages {
+                if terms.iter().any(|t| m.content.to_lowercase().contains(t)) {
+                    results.push(m);
+                }
+            }
+        }
+
         let content = if results.is_empty() {
             "No matching messages found.".into()
         } else {
-            let lines: Vec<String> = results.iter()
+            let lines: Vec<String> = results.iter().take(20)
                 .map(|m| format!("[{}] Chat: {} | {}: {}", m.created_at, m.chat_id, m.role, m.content))
                 .collect();
             lines.join("\n")

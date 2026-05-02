@@ -1,4 +1,4 @@
-use minus_core::Tool;
+use minus_api::Tool;
 
 mod chat;
 mod memory;

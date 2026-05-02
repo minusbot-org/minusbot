@@ -1,8 +1,8 @@
 use anyhow::Result;
-use minus_core::*;
+use minus_api::*;
 use minus_db::Database;
 use minus_env::{AppConfig, SecretsManager};
-use minus_policy::{PolicyAction, PolicyEngine};
+use minus_policy::PolicyEngine;
 use minus_providers::ProviderRegistry;
 use minus_skills::SkillManager;
 use minus_tools::ToolRegistry;
@@ -296,8 +296,8 @@ impl Agent {
                             chat_id: incoming.chat_id.clone(),
                             channel_id: incoming.channel_id.clone(),
                             component_id: ComponentId::new("agent"),
-                            store: Some(self.db.clone() as Arc<dyn std::any::Any + Send + Sync>),
-                            scheduler: Some(self.scheduler.clone() as Arc<dyn std::any::Any + Send + Sync>),
+                            db: self.db.clone() as Arc<dyn MinusDatabase>,
+                            scheduler: self.scheduler.clone() as Arc<dyn MinusScheduler>,
                         };
                         tools_lock.execute(tc.clone(), ctx).await?
                     } else {

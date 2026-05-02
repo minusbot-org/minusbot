@@ -1,6 +1,6 @@
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
-use minus_api::traits::{Command, CommandContext, CommandDefinition};
+use minus_api::{Command, CommandContext, CommandDefinition};
 
 pub struct MemoryCommand;
 

@@ -8,22 +8,19 @@ name = "minusd"
 path = "src/main.rs"
 
 [dependencies]
-minus-core = { path = "../../crates/minus-core" }
+minus-api = { path = "../../crates/minus-api" }
 minus-runtime = { path = "../../crates/minus-runtime" }
 minus-db = { path = "../../crates/minus-db" }
 minus-env = { path = "../../crates/minus-env" }
 minus-vault = { path = "../../crates/minus-vault" }
 minus-policy = { path = "../../crates/minus-policy" }
 minus-scheduler = { path = "../../crates/minus-scheduler" }
-minus-memory = { path = "../../crates/minus-memory" }
 minus-skills = { path = "../../crates/minus-skills" }
 minus-tools = { path = "../../crates/minus-tools" }
 minus-providers = { path = "../../crates/minus-providers" }
 minus-provider-openai = { path = "../../providers/minus-provider-openai" }
 minus-provider-openrouter = { path = "../../providers/minus-provider-openrouter" }
 minus-channel-cli = { path = "../../channels/minus-channel-cli" }
-minus-integrations = { path = "../../crates/minus-integrations" }
-minus-addons = { path = "../../crates/minus-addons" }
 minus-agent = { path = "../../crates/minus-agent" }
 minus-commands = { path = "../../crates/minus-commands" }
 anyhow = { workspace = true }
@@ -33,4 +30,3 @@ tracing-subscriber = { workspace = true }
 tracing-appender = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-rand.workspace = true

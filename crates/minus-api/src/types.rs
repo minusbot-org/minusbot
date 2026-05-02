@@ -1,10 +1,11 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-
 use uuid::Uuid;
 use crate::permissions::Permission;
 
-// --- ID newtypes ---
+// =============================================================================
+// ID newtypes
+// =============================================================================
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct UserId(pub String);
@@ -60,7 +61,9 @@ impl std::fmt::Display for JobId {
     }
 }
 
-// --- Messages ---
+// =============================================================================
+// Messages
+// =============================================================================
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -126,12 +129,27 @@ impl IncomingMessage {
     }
 }
 
+// =============================================================================
+// Packets — wire format for channel communication
+// =============================================================================
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessagePacket {
     pub chat_id: ChatId,
     pub role: String,
     pub content: String,
     pub metadata: Option<serde_json::Value>,
+}
+
+impl MessagePacket {
+    pub fn new(chat_id: ChatId, role: impl Into<String>, content: impl Into<String>) -> Self {
+        Self {
+            chat_id,
+            role: role.into(),
+            content: content.into(),
+            metadata: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,18 +176,17 @@ pub struct ToolCallPacket {
     pub brief: String,
 }
 
-impl MessagePacket {
-    pub fn new(chat_id: ChatId, role: impl Into<String>, content: impl Into<String>) -> Self {
-        Self {
-            chat_id,
-            role: role.into(),
-            content: content.into(),
-            metadata: None,
-        }
-    }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandFeedback {
+    pub chat_id: ChatId,
+    pub command: String,
+    pub result: String,
+    pub is_error: bool,
 }
 
-// --- Commands ---
+// =============================================================================
+// Commands
+// =============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommandDefinition {
@@ -181,26 +198,9 @@ pub struct CommandDefinition {
     pub min_args: usize,
 }
 
-// --- Skills ---
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SkillDefinition {
-    pub name: String,
-    pub description: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SkillCall {
-    pub name: String,
-    pub arguments: serde_json::Value,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SkillResult {
-    pub content: String,
-}
-
-// --- Tools ---
+// =============================================================================
+// Tools
+// =============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolDefinition {
@@ -234,7 +234,9 @@ pub struct ToolResult {
     pub is_error: bool,
 }
 
-// --- Provider ---
+// =============================================================================
+// Provider
+// =============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TextInferenceOptions {
@@ -310,7 +312,9 @@ impl Default for ProviderCapabilities {
     }
 }
 
-// --- Context ---
+// =============================================================================
+// Context
+// =============================================================================
 
 #[derive(Debug, Clone)]
 pub struct AgentContext {
@@ -321,8 +325,9 @@ pub struct AgentContext {
     pub system_prompt: String,
 }
 
-
-// --- Secret declarations ---
+// =============================================================================
+// Secret declarations
+// =============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecretDeclaration {
@@ -357,16 +362,10 @@ impl SecretDeclaration {
     }
 }
 
-// --- Addon manifest ---
+// =============================================================================
+// Database model DTOs — shared between API consumers and DB implementations
+// =============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AddonManifest {
-    pub id: String,
-    pub name: String,
-    pub version: String,
-    pub kind: String,
-    pub description: Option<String>,
-}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Chat {
     pub id: String,
@@ -408,14 +407,6 @@ pub struct SchedulerTask {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommandFeedback {
-    pub chat_id: ChatId,
-    pub command: String,
-    pub result: String,
-    pub is_error: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChannelStatus {
     pub id: String,
     pub name: String,
@@ -423,4 +414,3 @@ pub struct ChannelStatus {
     pub is_ready: bool,
     pub active_chat_id: Option<ChatId>,
 }
-

@@ -2,7 +2,6 @@ use anyhow::Result;
 use minus_agent::Agent;
 use minus_api::traits::*;
 use minus_api::types::*;
-use minus_api::events::*;
 use minus_db::Database;
 use minus_env::{AppConfig, SecretsManager};
 use minus_policy::PolicyEngine;
@@ -10,7 +9,8 @@ use minus_providers::ProviderRegistry;
 use minus_scheduler::Scheduler;
 use minus_skills::SkillManager;
 use minus_tools::ToolRegistry;
-use minus_vault::Vault;
+use minus_vault::{SubVault, Vault};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -28,8 +28,9 @@ pub struct Runtime {
     pub policy: Arc<PolicyEngine>,
     pub agent: Arc<Agent>,
     pub commands: Arc<RwLock<minus_commands::CommandRegistry>>,
-    pub config_providers: Arc<RwLock<std::collections::HashMap<String, Arc<dyn ConfigProvider>>>>,
-    pub channels: Arc<RwLock<std::collections::HashMap<String, Arc<dyn Channel>>>>,
+    pub config_providers: Arc<RwLock<HashMap<String, Arc<dyn ConfigProvider>>>>,
+    pub channels: Arc<RwLock<HashMap<String, Arc<dyn Channel>>>>,
+    pub integrations: Arc<RwLock<Vec<Arc<dyn Integration>>>>,
     pub shutdown_tx: tokio::sync::broadcast::Sender<()>,
 }
 
@@ -43,18 +44,19 @@ impl Runtime {
         let registry = runtime.commands.read().await;
         
         if let Some(cmd) = registry.get(&parsed.name) {
+            let (shutdown_tx, _) = tokio::sync::mpsc::channel(1);
             let ctx = CommandContext {
                 chat_id: msg.chat_id.clone(),
                 channel_id: msg.channel_id.clone(),
                 channel: channel.clone(),
-                db: runtime.clone(),
+                db: Arc::new(runtime.db.clone()) as Arc<dyn MinusDatabase>,
                 config_registry: runtime.clone(),
                 tools: runtime.clone(),
                 secrets: runtime.clone(),
                 providers: runtime.clone(),
                 scheduler: runtime.clone(),
                 channels: runtime.clone(),
-                shutdown_trigger: None, // TODO: Connect to shutdown_tx
+                shutdown_trigger: Some(shutdown_tx),
                 all_commands: registry.list(),
             };
             
@@ -76,60 +78,49 @@ impl Runtime {
         runtime.agent.handle_message(msg, channel).await
     }
 
-    pub async fn get_store(&self, prefix: &str) -> Result<Arc<dyn MinusSecretStore>> {
-        let vault = self.vault.clone().ok_or_else(|| anyhow::anyhow!("Vault not initialized"))?;
-        Ok(Arc::new(RuntimeSecretStore {
-            vault,
-            prefix: prefix.to_string(),
-        }))
+    /// Register a config provider (e.g., from a channel or provider)
+    pub async fn register(&self, provider: Arc<dyn ConfigProvider>) {
+        let id = provider.id().to_string();
+        self.config_providers.write().await.insert(id, provider);
+    }
+
+    /// Register a channel
+    pub async fn register_channel(&self, channel: Arc<dyn Channel>) {
+        let id = Channel::id(channel.as_ref()).to_string();
+        // If channel has a config provider, register that too
+        if let Some(config) = channel.config() {
+            self.register(config).await;
+        }
+        self.channels.write().await.insert(id, channel);
+    }
+
+    /// Register an integration
+    pub async fn register_integration(&self, integration: Arc<dyn Integration>) {
+        self.integrations.write().await.push(integration);
+    }
+
+    /// Resolve a secret value by checking vault first, then env secrets.
+    async fn resolve_secret_value(&self, key: &str) -> Result<Option<String>> {
+        // Check vault first
+        if let Some(vault) = &self.vault {
+            if vault.has_secret(key) {
+                if let Ok(bytes) = vault.get_secret(key) {
+                    return Ok(Some(String::from_utf8_lossy(&bytes).to_string()));
+                }
+            }
+        }
+        // Fallback to env secrets
+        let sec = self.secrets.read().await;
+        Ok(sec.get(key).map(|s| s.to_string()))
     }
 }
 
-#[minus_api::async_trait]
-impl MinusDatabase for Runtime {
-    async fn list_chats(&self) -> Result<Vec<Chat>> {
-        MinusDatabase::list_chats(&self.db).await
-    }
-    async fn get_chat(&self, id: &str) -> Result<Option<Chat>> {
-        MinusDatabase::get_chat(&self.db, id).await
-    }
-    async fn ensure_chat(&self, id: &str, channel_id: &str, external_id: &str, title: Option<&str>) -> Result<()> {
-        MinusDatabase::ensure_chat(&self.db, id, channel_id, external_id, title).await
-    }
-    async fn rename_chat(&self, id: &str, title: &str) -> Result<()> {
-        MinusDatabase::rename_chat(&self.db, id, title).await
-    }
-    async fn delete_chat(&self, id: &str) -> Result<()> {
-        MinusDatabase::delete_chat(&self.db, id).await
-    }
-    async fn get_messages(&self, chat_id: &str, limit: i64) -> Result<Vec<Message>> {
-        MinusDatabase::get_messages(&self.db, chat_id, limit).await
-    }
-    async fn delete_messages(&self, chat_id: &str) -> Result<()> {
-        MinusDatabase::delete_messages(&self.db, chat_id).await
-    }
-    async fn log_audit(&self, id: &str, actor: &str, action: &str, target: Option<&str>, metadata: Option<&str>, created_at: &str) -> Result<()> {
-        MinusDatabase::log_audit(&self.db, id, actor, action, target, metadata, created_at).await
-    }
-    async fn tail_audit(&self, limit: i64) -> Result<Vec<AuditEvent>> {
-        MinusDatabase::tail_audit(&self.db, limit).await
-    }
-
-    async fn list_memories(&self) -> Result<Vec<Memory>> {
-        MinusDatabase::list_memories(&self.db).await
-    }
-
-    async fn save_memory(&self, id: &str, kind: &str, brief: &str, content: Option<&str>, is_important: bool) -> Result<()> {
-        MinusDatabase::save_memory(&self.db, id, kind, brief, content, is_important).await
-    }
-
-    async fn delete_memory(&self, id: &str) -> Result<bool> {
-        MinusDatabase::delete_memory(&self.db, id).await
-    }
-}
+// =============================================================================
+// MinusScheduler — delegate to Scheduler
+// =============================================================================
 
 #[minus_api::async_trait]
-impl minus_api::traits::MinusScheduler for Runtime {
+impl MinusScheduler for Runtime {
     async fn list_tasks(&self) -> Result<Vec<SchedulerTask>> {
         minus_api::traits::MinusScheduler::list_tasks(self.scheduler.as_ref()).await
     }
@@ -137,10 +128,18 @@ impl minus_api::traits::MinusScheduler for Runtime {
     async fn delete_task(&self, id: &str) -> Result<bool> {
         minus_api::traits::MinusScheduler::delete_task(self.scheduler.as_ref(), id).await
     }
+
+    async fn create_task(&self, name: &str, schedule: &str, prompt: &str, target_chat_id: Option<&str>) -> Result<String> {
+        minus_api::traits::MinusScheduler::create_task(self.scheduler.as_ref(), name, schedule, prompt, target_chat_id).await
+    }
 }
 
+// =============================================================================
+// MinusChannels — backed by in-memory HashMap (absorbed from minus-channels)
+// =============================================================================
+
 #[minus_api::async_trait]
-impl minus_api::traits::MinusChannels for Runtime {
+impl MinusChannels for Runtime {
     async fn list_channels(&self) -> Vec<ChannelStatus> {
         let channels = self.channels.read().await;
         let mut statuses = Vec::new();
@@ -162,16 +161,23 @@ impl minus_api::traits::MinusChannels for Runtime {
     }
 
     async fn set_channel_enabled(&self, id: &str, enabled: bool) -> Result<bool> {
-        let chan = self.get_channel(id).await.ok_or_else(|| anyhow::anyhow!("Channel not found"))?;
+        let chan = self.get_channel(id).await
+            .ok_or_else(|| anyhow::anyhow!("Channel '{}' not found", id))?;
         chan.set_enabled(enabled).await
     }
 }
 
+// =============================================================================
+// MinusSecrets — uses Vault's SubVault for prefix-isolated access
+// =============================================================================
+
 #[minus_api::async_trait]
 impl MinusSecrets for Runtime {
     async fn get_store(&self, component_id: &str) -> Result<Arc<dyn MinusSecretStore>> {
+        let vault = self.vault.clone()
+            .ok_or_else(|| anyhow::anyhow!("Vault not initialized"))?;
         let prefix = format!("{}:", component_id);
-        self.get_store(&prefix).await
+        Ok(Arc::new(SubVault::new(vault, prefix)))
     }
 
     async fn list_secret_declarations(&self) -> Result<Vec<SecretDeclaration>> {
@@ -183,7 +189,11 @@ impl MinusSecrets for Runtime {
             let db_record = db_records.iter().find(|r| r.key == key);
             let (comp_id, desc, mut approved) = if key.starts_with("PROVIDER_") {
                 let parts: Vec<&str> = key.splitn(3, '_').collect();
-                let comp = if parts.len() >= 2 { format!("provider:{}", parts[1].to_lowercase()) } else { "provider".to_string() };
+                let comp = if parts.len() >= 2 {
+                    format!("provider:{}", parts[1].to_lowercase())
+                } else {
+                    "provider".to_string()
+                };
                 (comp, "Auto-declared (Provider)", true)
             } else {
                 ("system".to_string(), "Orphan / Custom", false)
@@ -199,7 +209,10 @@ impl MinusSecrets for Runtime {
                 required: db_record.map(|r| r.required).unwrap_or(false),
                 permissions: vec![],
                 approved,
-                created_at: db_record.map(|r| chrono::DateTime::parse_from_rfc3339(&r.created_at).unwrap_or_default().with_timezone(&chrono::Utc)).unwrap_or_else(chrono::Utc::now),
+                created_at: db_record.map(|r| {
+                    chrono::DateTime::parse_from_rfc3339(&r.created_at)
+                        .unwrap_or_default().with_timezone(&chrono::Utc)
+                }).unwrap_or_else(chrono::Utc::now),
             });
         }
         Ok(declarations)
@@ -212,38 +225,15 @@ impl MinusSecrets for Runtime {
     async fn deny_secret(&self, component_id: &str, key: &str) -> Result<()> {
         self.db.set_secret_declaration_approval(component_id, key, false).await.map(|_| ())
     }
+
+    async fn resolve_secret(&self, key: &str) -> Result<Option<String>> {
+        self.resolve_secret_value(key).await
+    }
 }
 
-pub struct RuntimeSecretStore {
-    vault: Arc<Vault>,
-    prefix: String,
-}
-
-#[minus_api::async_trait]
-impl MinusSecretStore for RuntimeSecretStore {
-    async fn put_secret(&self, key: &str, value: &[u8]) -> Result<()> {
-        let full_key = format!("{}{}", self.prefix, key);
-        self.vault.put_secret(&full_key, value)
-    }
-    async fn get_secret(&self, key: &str) -> Result<Option<Vec<u8>>> {
-        let full_key = format!("{}{}", self.prefix, key);
-        match self.vault.get_secret(&full_key) {
-            Ok(v) => Ok(Some(v)),
-            Err(_) => Ok(None),
-        }
-    }
-    async fn delete_secret(&self, key: &str) -> Result<()> {
-        let full_key = format!("{}{}", self.prefix, key);
-        self.vault.delete_secret(&full_key).map(|_| ())
-    }
-    async fn list_secrets(&self) -> Result<Vec<String>> {
-        Ok(vec![])
-    }
-    async fn has_secret(&self, key: &str) -> Result<bool> {
-        let full_key = format!("{}{}", self.prefix, key);
-        Ok(self.vault.has_secret(&full_key))
-    }
-}
+// =============================================================================
+// MinusProviders — delegate to ProviderRegistry, with unified secret resolution
+// =============================================================================
 
 #[minus_api::async_trait]
 impl MinusProviders for Runtime {
@@ -260,15 +250,7 @@ impl MinusProviders for Runtime {
     async fn list_text_models(&self) -> Result<Vec<String>> {
         let provider_id = self.get_default_provider_id().await?;
         let key_name = format!("PROVIDER_{}_API_KEY", provider_id.to_uppercase());
-        let secret_key = if let Some(vault) = &self.vault {
-            vault.get_secret(&key_name).ok().map(|b| String::from_utf8_lossy(&b).to_string())
-                .or({
-                    let sec = self.secrets.read().await;
-                    sec.get(&key_name).map(|s| s.to_string())
-                })
-        } else {
-            self.secrets.read().await.get(&key_name).map(|s| s.to_string())
-        };
+        let secret_key = self.resolve_secret_value(&key_name).await?;
         self.providers.read().await.get_text_models(secret_key).await
     }
     async fn get_default_provider_id(&self) -> Result<String> {
@@ -279,12 +261,23 @@ impl MinusProviders for Runtime {
     }
     async fn set_default_text_model(&self, model: &str) -> Result<()> {
         self.providers.write().await.set_default_model(model);
-        let mut cfg = self.config.write().await;
-        cfg.provider.text_model = Some(model.to_string());
-        cfg.save(&self.config_path)?;
+        // Also persist to provider-specific config
+        if let Some(p) = self.providers.read().await.default_provider() {
+            if let Some(cp) = p.config() {
+                cp.set_config("text_model", model).await?;
+            }
+        }
         Ok(())
     }
+    async fn resolve_api_key(&self, provider_id: &str) -> Result<Option<String>> {
+        let key_name = format!("PROVIDER_{}_API_KEY", provider_id.to_uppercase());
+        self.resolve_secret_value(&key_name).await
+    }
 }
+
+// =============================================================================
+// MinusConfigRegistry
+// =============================================================================
 
 #[minus_api::async_trait]
 impl MinusConfigRegistry for Runtime {
@@ -299,6 +292,10 @@ impl MinusConfigRegistry for Runtime {
         self.config_providers.write().await.insert(id, provider);
     }
 }
+
+// =============================================================================
+// MinusTools — delegate to ToolRegistry
+// =============================================================================
 
 #[minus_api::async_trait]
 impl MinusTools for Runtime {

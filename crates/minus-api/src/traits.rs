@@ -1,9 +1,13 @@
 use crate::types::*;
-pub use crate::types::CommandDefinition;
 use crate::events::*;
+use crate::permissions::*;
 use anyhow::Result;
 use async_trait::async_trait;
 use std::sync::Arc;
+
+// =============================================================================
+// Component traits — implemented by channels, providers, integrations
+// =============================================================================
 
 #[async_trait]
 pub trait Channel: Send + Sync {
@@ -12,7 +16,7 @@ pub trait Channel: Send + Sync {
     
     // Status
     fn is_enabled(&self) -> bool;
-    async fn set_enabled(&self, flag: bool) -> Result<bool>; // Returns true if state changed
+    async fn set_enabled(&self, flag: bool) -> Result<bool>;
     async fn is_ready(&self) -> bool;
     
     // Chat context
@@ -33,7 +37,7 @@ pub trait Channel: Send + Sync {
     async fn register_commands(&self, _commands: Vec<CommandDefinition>) -> Result<()> { Ok(()) }
 
     // Events (Informing channel about state changes)
-    async fn on_chat_switch(&self, _chat_id: &ChatId) -> Result<()> { Ok(()) }
+    async fn on_chat_switch(&self, _chat_id: &ChatId, _messages: Vec<Message>) -> Result<()> { Ok(()) }
 
     fn config(&self) -> Option<Arc<dyn ConfigProvider>> {
         None
@@ -62,12 +66,6 @@ pub trait Provider: Send + Sync {
 pub trait TextProvider: Provider {
     async fn generate_text(&self, request: ProviderRequest) -> Result<ProviderResponse>;
     async fn get_text_models(&self, secret_key: Option<String>) -> Result<Vec<String>>;
-}
-
-#[async_trait]
-pub trait Skill: Send + Sync {
-    fn definition(&self) -> SkillDefinition;
-    async fn execute(&self, call: SkillCall, ctx: SkillContext) -> Result<SkillResult>;
 }
 
 #[async_trait]
@@ -104,22 +102,22 @@ pub trait ConfigProvider: Send + Sync {
     async fn set_config(&self, key: &str, value: &str) -> Result<()>;
 }
 
+// =============================================================================
+// Context structs — passed to commands, tools, skills
+// =============================================================================
+
 #[derive(Clone, Debug)]
 pub struct ChannelContext {
     pub channel_id: ChannelId,
     pub config_dir: std::path::PathBuf,
 }
 
-pub struct SkillContext {
-    pub chat_id: ChatId,
-}
-
 pub struct ToolContext {
     pub chat_id: ChatId,
     pub channel_id: ChannelId,
     pub component_id: ComponentId,
-    pub store: Option<Arc<dyn std::any::Any + Send + Sync>>,
-    pub scheduler: Option<Arc<dyn std::any::Any + Send + Sync>>,
+    pub db: Arc<dyn MinusDatabase>,
+    pub scheduler: Arc<dyn MinusScheduler>,
 }
 
 pub struct CommandContext {
@@ -137,6 +135,35 @@ pub struct CommandContext {
     pub all_commands: Vec<CommandDefinition>,
 }
 
+// =============================================================================
+// Service traits — facades over subsystem implementations
+// =============================================================================
+
+#[async_trait]
+pub trait MinusDatabase: Send + Sync {
+    // Chat management
+    async fn list_chats(&self) -> Result<Vec<Chat>>;
+    async fn get_chat(&self, id: &str) -> Result<Option<Chat>>;
+    async fn ensure_chat(&self, id: &str, channel_id: &str, external_id: &str, title: Option<&str>) -> Result<()>;
+    async fn rename_chat(&self, id: &str, title: &str) -> Result<()>;
+    async fn delete_chat(&self, id: &str) -> Result<()>;
+
+    // Message management
+    async fn get_messages(&self, chat_id: &str, limit: i64) -> Result<Vec<Message>>;
+    async fn save_message(&self, id: &str, chat_id: &str, role: &str, content: &str, metadata: Option<&str>) -> Result<()>;
+    async fn delete_messages(&self, chat_id: &str) -> Result<()>;
+
+    // Audit management
+    async fn log_audit(&self, id: &str, actor: &str, action: &str, target: Option<&str>, metadata: Option<&str>, created_at: &str) -> Result<()>;
+    async fn tail_audit(&self, limit: i64) -> Result<Vec<AuditEvent>>;
+
+    // Memory management
+    async fn list_memories(&self) -> Result<Vec<Memory>>;
+    async fn get_important_memories(&self) -> Result<Vec<Memory>>;
+    async fn save_memory(&self, id: &str, kind: &str, brief: &str, content: Option<&str>, is_important: bool) -> Result<()>;
+    async fn delete_memory(&self, id: &str) -> Result<bool>;
+}
+
 #[async_trait]
 pub trait MinusChannels: Send + Sync {
     async fn list_channels(&self) -> Vec<ChannelStatus>;
@@ -148,6 +175,7 @@ pub trait MinusChannels: Send + Sync {
 pub trait MinusScheduler: Send + Sync {
     async fn list_tasks(&self) -> Result<Vec<SchedulerTask>>;
     async fn delete_task(&self, id: &str) -> Result<bool>;
+    async fn create_task(&self, name: &str, schedule: &str, prompt: &str, target_chat_id: Option<&str>) -> Result<String>;
 }
 
 #[async_trait]
@@ -172,6 +200,8 @@ pub trait MinusSecrets: Send + Sync {
     async fn list_secret_declarations(&self) -> Result<Vec<SecretDeclaration>>;
     async fn approve_secret(&self, component_id: &str, key: &str) -> Result<()>;
     async fn deny_secret(&self, component_id: &str, key: &str) -> Result<()>;
+    /// Resolve a secret value by key. Checks vault first, then env secrets.
+    async fn resolve_secret(&self, key: &str) -> Result<Option<String>>;
 }
 
 #[async_trait]
@@ -187,52 +217,18 @@ pub trait MinusProviders: Send + Sync {
     async fn get_default_provider_id(&self) -> Result<String>;
     async fn get_default_text_model(&self) -> Result<String>;
     async fn set_default_text_model(&self, model: &str) -> Result<()>;
+    /// Resolve the API key for a provider, checking vault then env.
+    async fn resolve_api_key(&self, provider_id: &str) -> Result<Option<String>>;
 }
 
-pub struct AddonRegistry {
-    pub tools: Vec<Box<dyn Tool>>,
-    pub integrations: Vec<Box<dyn Provider>>,
-    pub commands: Vec<Box<dyn Command>>,
+/// Policy evaluation trait.
+pub trait MinusPolicy: Send + Sync {
+    fn evaluate(&self, action: &PolicyAction) -> PolicyDecision;
 }
 
-impl AddonRegistry {
-    pub fn new() -> Self {
-        Self {
-            tools: Vec::new(),
-            integrations: Vec::new(),
-            commands: Vec::new(),
-        }
-    }
-}
-
-impl Default for AddonRegistry {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[async_trait]
-pub trait MinusDatabase: Send + Sync {
-    // Chat management
-    async fn list_chats(&self) -> Result<Vec<Chat>>;
-    async fn get_chat(&self, id: &str) -> Result<Option<Chat>>;
-    async fn ensure_chat(&self, id: &str, channel_id: &str, external_id: &str, title: Option<&str>) -> Result<()>;
-    async fn rename_chat(&self, id: &str, title: &str) -> Result<()>;
-    async fn delete_chat(&self, id: &str) -> Result<()>;
-
-    // Message management
-    async fn get_messages(&self, chat_id: &str, limit: i64) -> Result<Vec<Message>>;
-    async fn delete_messages(&self, chat_id: &str) -> Result<()>;
-
-    // Audit management
-    async fn log_audit(&self, id: &str, actor: &str, action: &str, target: Option<&str>, metadata: Option<&str>, created_at: &str) -> Result<()>;
-    async fn tail_audit(&self, limit: i64) -> Result<Vec<AuditEvent>>;
-
-    // Memory management
-    async fn list_memories(&self) -> Result<Vec<Memory>>;
-    async fn save_memory(&self, id: &str, kind: &str, brief: &str, content: Option<&str>, is_important: bool) -> Result<()>;
-    async fn delete_memory(&self, id: &str) -> Result<bool>;
-}
+// =============================================================================
+// Utility implementations — FileConfigProvider
+// =============================================================================
 
 pub struct FileConfigProvider {
     id: &'static str,

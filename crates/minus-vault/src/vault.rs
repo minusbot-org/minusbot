@@ -195,6 +195,33 @@ impl Vault {
     }
 }
 
+#[minus_api::async_trait]
+impl minus_api::MinusSecretStore for Vault {
+    async fn get_secret(&self, key: &str) -> Result<Option<Vec<u8>>> {
+        match self.get_secret(key) {
+            Ok(v) => Ok(Some(v)),
+            Err(_) => Ok(None),
+        }
+    }
+
+    async fn put_secret(&self, key: &str, value: &[u8]) -> Result<()> {
+        self.put_secret(key, value)
+    }
+
+    async fn delete_secret(&self, key: &str) -> Result<()> {
+        self.delete_secret(key)?;
+        Ok(())
+    }
+
+    async fn list_secrets(&self) -> Result<Vec<String>> {
+        Ok(self.list_keys())
+    }
+
+    async fn has_secret(&self, key: &str) -> Result<bool> {
+        Ok(self.has_secret(key))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

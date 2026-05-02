@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use minus_core::{Tool, ToolCall, ToolContext, ToolDefinition, ToolResult, ToolRisk};
-use minus_db::Database;
+use minus_api::{Tool, ToolCall, ToolContext, ToolDefinition, ToolResult, ToolRisk};
 use serde_json::json;
 
 /// Tool: memory_write
@@ -29,16 +28,12 @@ impl Tool for MemoryWriteTool {
     }
 
     async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
-        let db = ctx.store.as_ref()
-            .and_then(|s| s.downcast_ref::<Database>())
-            .context("Database not found in ToolContext")?;
-        
         let id = call.arguments["id"].as_str().context("Missing id")?;
         let brief = call.arguments["brief"].as_str().context("Missing brief")?;
         let content = call.arguments["content"].as_str().context("Missing content")?;
         let is_important = call.arguments["is_important"].as_bool().unwrap_or(false);
 
-        db.save_memory(id, "long", brief, Some(content), is_important).await?;
+        ctx.db.save_memory(id, "long", brief, Some(content), is_important).await?;
 
         Ok(ToolResult {
             tool_call_id: call.id,
@@ -57,13 +52,11 @@ impl Tool for MemoryReadTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
             name: "memory_read".into(),
-            description: "Retrieve a specific memory by its ID.".into(),
+            description: "List all stored memories.".into(),
             input_schema: json!({
                 "type": "object",
-                "properties": {
-                    "id": { "type": "string", "description": "The unique identifier of the memory to read" }
-                },
-                "required": ["id"]
+                "properties": {},
+                "required": []
             }),
             risk: ToolRisk::Low,
             side_effect: false,
@@ -71,29 +64,26 @@ impl Tool for MemoryReadTool {
     }
 
     async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
-        let db = ctx.store.as_ref()
-            .and_then(|s| s.downcast_ref::<Database>())
-            .context("Database not found in ToolContext")?;
-        
-        let id = call.arguments["id"].as_str().context("Missing id")?;
-        let memory = db.get_memory(id).await?;
-
-        let content = match memory.as_ref() {
-            Some(m) => format!("ID: {}\nBrief: {}\nContent: {}\nImportant: {}\nCreated: {}", 
-                m.id, m.brief, m.content.as_deref().unwrap_or("(no content)"), m.is_important, m.created_at),
-            None => format!("Memory with ID '{}' not found.", id),
+        let memories = ctx.db.list_memories().await?;
+        let content = if memories.is_empty() {
+            "No memories stored.".into()
+        } else {
+            let lines: Vec<String> = memories.iter()
+                .map(|m| format!("[{}] Brief: {} | Important: {}", m.id, m.brief, m.is_important))
+                .collect();
+            lines.join("\n")
         };
 
         Ok(ToolResult {
             tool_call_id: call.id,
             name: "memory_read".into(),
             content,
-            is_error: memory.is_none(),
+            is_error: false,
         })
     }
 }
 
-/// Tool: memory_search
+/// Tool: memory_search — search memories using the DB layer directly
 pub struct MemorySearchTool;
 
 #[async_trait]
@@ -119,17 +109,22 @@ impl Tool for MemorySearchTool {
     }
 
     async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
-        let db = ctx.store.as_ref()
-            .and_then(|s| s.downcast_ref::<Database>())
-            .context("Database not found in ToolContext")?;
-        
+        // Use list_memories as a fallback search (the MinusDatabase trait doesn't
+        // have search_memories — that's on the concrete DB). Filter client-side.
         let terms: Vec<String> = call.arguments["terms"].as_array()
             .context("Missing terms")?
             .iter()
-            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .filter_map(|v| v.as_str().map(|s| s.to_lowercase()))
             .collect();
 
-        let results = db.search_memories(&terms).await?;
+        let all = ctx.db.list_memories().await?;
+        let results: Vec<_> = all.into_iter().filter(|m| {
+            terms.iter().any(|t| {
+                m.brief.to_lowercase().contains(t) ||
+                m.content.as_deref().unwrap_or("").to_lowercase().contains(t)
+            })
+        }).collect();
+
         let content = if results.is_empty() {
             "No matching memories found.".into()
         } else {
@@ -170,13 +165,9 @@ impl Tool for MemoryDeleteTool {
     }
 
     async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
-        let db = ctx.store.as_ref()
-            .and_then(|s| s.downcast_ref::<Database>())
-            .context("Database not found in ToolContext")?;
-        
         let id = call.arguments["id"].as_str().context("Missing id")?;
 
-        if db.delete_memory(id).await? {
+        if ctx.db.delete_memory(id).await? {
             Ok(ToolResult {
                 tool_call_id: call.id,
                 name: "memory_delete".into(),

@@ -1,4 +1,4 @@
-use minus_api::{ChatId, NotificationPacket, NotificationSeverity, CommandDefinition, traits::{Command, CommandContext}};
+use minus_api::{ChatId, NotificationPacket, NotificationSeverity, CommandDefinition, Command, CommandContext};
 use anyhow::Result;
 use async_trait::async_trait;
 
@@ -46,8 +46,9 @@ impl Command for ChatListCommand {
                 let chat = db.get_chat(id).await?;
                 match chat {
                     Some(c) => {
-                        // Notify channel about chat switch
-                        ctx.channel.on_chat_switch(&ChatId(c.id.clone())).await?;
+                        // Fetch message history and notify channel about chat switch
+                        let messages = db.get_messages(&c.id, 50).await.unwrap_or_default();
+                        ctx.channel.on_chat_switch(&ChatId(c.id.clone()), messages).await?;
 
                         // Attempt to update channel config
                         let provider_id = format!("channel.{}", ctx.channel_id.0);

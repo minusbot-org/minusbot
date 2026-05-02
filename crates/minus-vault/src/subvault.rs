@@ -50,3 +50,30 @@ impl SubVault {
         self.vault.has_secret(&self.prefixed_key(key))
     }
 }
+
+#[minus_api::async_trait]
+impl minus_api::MinusSecretStore for SubVault {
+    async fn get_secret(&self, key: &str) -> anyhow::Result<Option<Vec<u8>>> {
+        match self.vault.get_secret(&self.prefixed_key(key)) {
+            Ok(v) => Ok(Some(v)),
+            Err(_) => Ok(None),
+        }
+    }
+
+    async fn put_secret(&self, key: &str, value: &[u8]) -> anyhow::Result<()> {
+        self.vault.put_secret(&self.prefixed_key(key), value)
+    }
+
+    async fn delete_secret(&self, key: &str) -> anyhow::Result<()> {
+        self.vault.delete_secret(&self.prefixed_key(key))?;
+        Ok(())
+    }
+
+    async fn list_secrets(&self) -> anyhow::Result<Vec<String>> {
+        self.list_secrets()
+    }
+
+    async fn has_secret(&self, key: &str) -> anyhow::Result<bool> {
+        Ok(self.has_secret(key))
+    }
+}

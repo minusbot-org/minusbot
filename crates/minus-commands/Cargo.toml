@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 serde = { workspace = true }
 async-trait = { workspace = true }
-minus-core = { path = "../minus-core" }
 minus-api = { path = "../minus-api" }
 anyhow = { workspace = true }
 tracing = { workspace = true }

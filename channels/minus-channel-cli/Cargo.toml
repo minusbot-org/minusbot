@@ -5,8 +5,6 @@ edition = "2021"
 
 [dependencies]
 minus-api = { version = "0.1.0", path = "../../crates/minus-api" }
-minus-core = { path = "../../crates/minus-core" }
-minus-db = { path = "../../crates/minus-db" }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }

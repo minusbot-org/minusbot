@@ -1,5 +1,5 @@
-use minus_core::traits::{Command, CommandDefinition};
-use minus_core::async_trait;
+use minus_api::{Command, CommandDefinition};
+use minus_api::async_trait;
 use std::sync::Arc;
 use std::collections::HashMap;
 
@@ -42,7 +42,7 @@ impl CommandRegistry {
 pub type CommandMetadata = CommandDefinition;
 
 pub struct IntegrationCommand {
-    pub integration: Arc<dyn minus_core::traits::Integration>,
+    pub integration: Arc<dyn minus_api::Integration>,
     pub def: CommandDefinition,
 }
 
@@ -52,7 +52,7 @@ impl Command for IntegrationCommand {
         self.def.clone()
     }
 
-    async fn execute(&self, args: Vec<String>, ctx: minus_core::traits::CommandContext) -> anyhow::Result<String> {
+    async fn execute(&self, args: Vec<String>, ctx: minus_api::CommandContext) -> anyhow::Result<String> {
         self.integration.execute_command(self.def.name.clone(), args, ctx).await
     }
 }
