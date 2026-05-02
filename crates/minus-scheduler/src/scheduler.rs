@@ -73,15 +73,16 @@ impl Scheduler {
         &self,
         name: &str,
         schedule_str: &str,
-        prompt: &str,
+        content: &str,
         target_chat_id: Option<&str>,
+        generate: bool,
     ) -> Result<String> {
         self.create_job_v2(
             name,
             schedule_str,
-            vec![JobAction::AgentPrompt {
-                prompt: prompt.to_string(),
-                agent_id: None,
+            vec![JobAction::MessageSend {
+                content: content.to_string(),
+                generate,
             }],
             target_chat_id,
         )
@@ -475,8 +476,8 @@ impl minus_api::traits::MinusScheduler for Scheduler {
         self.cancel_job(id).await
     }
 
-    async fn create_task(&self, name: &str, schedule: &str, prompt: &str, target_chat_id: Option<&str>) -> Result<String> {
-        self.create_job(name, schedule, prompt, target_chat_id).await
+    async fn create_task(&self, name: &str, schedule: &str, prompt: &str, target_chat_id: Option<&str>, generate: bool) -> Result<String> {
+        self.create_job(name, schedule, prompt, target_chat_id, generate).await
     }
 }
 

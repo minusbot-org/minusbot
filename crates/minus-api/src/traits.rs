@@ -184,7 +184,7 @@ pub trait MinusChannels: Send + Sync {
 pub trait MinusScheduler: Send + Sync {
     async fn list_tasks(&self) -> Result<Vec<SchedulerTask>>;
     async fn delete_task(&self, id: &str) -> Result<bool>;
-    async fn create_task(&self, name: &str, schedule: &str, prompt: &str, target_chat_id: Option<&str>) -> Result<String>;
+    async fn create_task(&self, name: &str, schedule: &str, prompt: &str, target_chat_id: Option<&str>, generate: bool) -> Result<String>;
 }
 
 #[async_trait]

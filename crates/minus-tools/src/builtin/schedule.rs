@@ -35,6 +35,8 @@ impl Tool for ScheduleCreateTool {
         let schedule_str = call.arguments["schedule"].as_str().context("Missing schedule")?;
         let content = call.arguments["content"].as_str().context("Missing content")?;
 
+        let generate = call.arguments["generate"].as_bool().unwrap_or(false);
+        
         // Use the MinusScheduler trait to create a task
         // The scheduler will be connected by the runtime
         let task_id = ctx.scheduler.create_task(
@@ -42,6 +44,7 @@ impl Tool for ScheduleCreateTool {
             schedule_str,
             content,
             Some(&ctx.chat_id.0),
+            generate,
         ).await?;
 
         Ok(ToolResult {
@@ -162,7 +165,8 @@ impl Tool for ScheduleUpdateTool {
                         "type": "string", 
                         "description": "New schedule format: 'delay:10s', 'interval:1h', or 'cron:0 9 * * *'" 
                     },
-                    "content": { "type": "string", "description": "The message content to send." }
+                    "content": { "type": "string", "description": "The message content to send." },
+                    "generate": { "type": "boolean", "description": "If true, the assistant will process the message.", "default": false }
                 },
                 "required": ["id", "name", "schedule", "content"]
             }),
@@ -177,10 +181,11 @@ impl Tool for ScheduleUpdateTool {
         let schedule_str = call.arguments["schedule"].as_str().context("Missing schedule")?;
         let content = call.arguments["content"].as_str().context("Missing content")?;
 
+        let generate = call.arguments["generate"].as_bool().unwrap_or(false);
         // Delete old
         ctx.scheduler.delete_task(id).await?;
         // Create new
-        let new_id = ctx.scheduler.create_task(name, schedule_str, content, Some(&ctx.chat_id.0)).await?;
+        let new_id = ctx.scheduler.create_task(name, schedule_str, content, Some(&ctx.chat_id.0), generate).await?;
 
         Ok(ToolResult {
             tool_call_id: call.id,

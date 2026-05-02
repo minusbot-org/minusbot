@@ -1,5 +1,5 @@
 use crate::registry;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use minus_api::*;
 use minus_db::Database;
 use minus_env::{AppConfig, SecretsManager};
@@ -66,7 +66,8 @@ impl Agent {
         incoming: &IncomingMessage,
         channel: Arc<dyn traits::Channel>,
     ) -> Result<String> {
-        self.handle_message_with_agent("default", incoming, Some(channel)).await
+        self.handle_message_with_agent("default", incoming, Some(channel))
+            .await
     }
 
     pub async fn handle_message_with_agent(
@@ -76,7 +77,7 @@ impl Agent {
         channel: Option<Arc<dyn traits::Channel>>,
     ) -> Result<String> {
         let chat_id = &incoming.chat_id.0;
-        
+
         // Show typing indicator
         if let Some(ref ch) = channel {
             let _ = ch.set_typing(incoming.chat_id.clone(), true).await;
@@ -97,11 +98,18 @@ impl Agent {
         let providers = self.providers.read().await;
         let provider = match providers.default_provider() {
             Some(p) => p,
-            None => return Ok("No LLM provider is configured. Use `/providers <id>` to set one.".to_string()),
+            None => {
+                return Ok(
+                    "No LLM provider is configured. Use `/providers <id>` to set one.".to_string(),
+                )
+            }
         };
-        
+
         if !provider.is_ready().await {
-            return Ok(format!("Provider '{}' is not ready. Use '/models' to select a model.", provider.id()));
+            return Ok(format!(
+                "Provider '{}' is not ready. Use '/models' to select a model.",
+                provider.id()
+            ));
         }
         drop(providers);
 
@@ -122,9 +130,29 @@ impl Agent {
             memory_briefs.push_str("(No important memories saved yet)");
         } else {
             for m in important_memories {
-                memory_briefs.push_str(&format!("- [{}]: {} (created: {})\n", m.id, m.brief, m.created_at));
+                memory_briefs.push_str(&format!(
+                    "- [{}]: {} (created: {})\n",
+                    m.id, m.brief, m.created_at
+                ));
             }
         }
+
+        // 6b. Fetch available channels
+        let mut channels_info = Vec::new();
+        if let Some(channels_service) = self.channels.read().await.as_ref().and_then(|w| w.upgrade()) {
+            let statuses = channels_service.list_channels().await;
+            for status in statuses {
+                if status.is_ready {
+                    let chat_str = status.active_chat_id.map(|c| c.0).unwrap_or_else(|| "none".to_string());
+                    channels_info.push(format!("{} (id: {}, chat: {})", status.name, status.id, chat_str));
+                }
+            }
+        }
+        let available_channels = if channels_info.is_empty() {
+            "No other ready channels available.".to_string()
+        } else {
+            channels_info.join(", ")
+        };
 
         // 7. Build system prompt
         let now = chrono::Local::now();
@@ -134,11 +162,12 @@ impl Agent {
         let mut system_prompt = if let Some(agent) = self.registry.get(agent_id).await {
             agent.system_prompt
         } else {
-            let custom_prompt_path = self.config_dir.join("system_prompt.txt");
+            let custom_prompt_path = self.config_dir.join("system_prompt.md");
             if custom_prompt_path.exists() {
-                std::fs::read_to_string(custom_prompt_path).unwrap_or_else(|_| include_str!("system_prompt.txt").to_string())
+                std::fs::read_to_string(custom_prompt_path)
+                    .unwrap_or_else(|_| include_str!("system_prompt.md").to_string())
             } else {
-                include_str!("system_prompt.txt").to_string()
+                include_str!("system_prompt.md").to_string()
             }
         };
 
@@ -146,6 +175,7 @@ impl Agent {
         system_prompt = system_prompt
             .replace("{date}", &date_str)
             .replace("{time}", &time_str)
+            .replace("{available_channels}", &available_channels)
             .replace("{chat_id}", chat_id)
             .replace("{channel_id}", &incoming.channel_id.0)
             .replace("{memory_briefs}", &memory_briefs);
@@ -214,10 +244,7 @@ impl Agent {
 
         // 10. Provider request
         let providers = self.providers.read().await;
-        let model = providers
-            .default_model()
-            .unwrap_or("")
-            .to_string();
+        let model = providers.default_model().unwrap_or("").to_string();
 
         let provider_id = providers.default_id().unwrap_or("unknown");
         let key_name = format!("PROVIDER_{}_API_KEY", provider_id.to_uppercase());
@@ -227,12 +254,16 @@ impl Agent {
                 Ok(bytes) => String::from_utf8_lossy(&bytes).to_string(),
                 Err(_) => {
                     let sec = self.secrets.read().await;
-                    sec.get(&key_name).map(|s| s.to_string()).unwrap_or_default()
+                    sec.get(&key_name)
+                        .map(|s| s.to_string())
+                        .unwrap_or_default()
                 }
             }
         } else {
             let sec = self.secrets.read().await;
-            sec.get(&key_name).map(|s| s.to_string()).unwrap_or_default()
+            sec.get(&key_name)
+                .map(|s| s.to_string())
+                .unwrap_or_default()
         };
 
         let options = TextInferenceOptions {
@@ -300,36 +331,58 @@ impl Agent {
                 // Execute each tool call
                 for tc in &response.tool_calls {
                     tracing::info!(tool = %tc.name, "Executing tool call");
-                    
+
                     if let Some(ref ch) = channel {
-                        let _ = ch.send_tool_call(ToolCallPacket {
-                            chat_id: incoming.chat_id.clone(),
-                            call_id: tc.id.clone(),
-                            name: tc.name.clone(),
-                            brief: String::new(), // TODO: Add actual brief if needed
-                        }).await;
+                        let _ = ch
+                            .send_tool_call(ToolCallPacket {
+                                chat_id: incoming.chat_id.clone(),
+                                call_id: tc.id.clone(),
+                                name: tc.name.clone(),
+                                brief: String::new(), // TODO: Add actual brief if needed
+                            })
+                            .await;
                     }
 
                     // Policy check
                     let tool_decision = self.policy.evaluate(&PolicyAction::ToolCall {
                         tool_name: tc.name.clone(),
                     });
-                    
-                    let result = if tool_decision.is_allowed() {
-                        let channels = self.channels.read().await.as_ref()
-                            .and_then(|w| w.upgrade())
-                            .context("Channels service not available in agent")?;
 
-                        let ctx = ToolContext {
-                            chat_id: incoming.chat_id.clone(),
-                            channel_id: incoming.channel_id.clone(),
-                            component_id: ComponentId::new("agent"),
-                            db: self.db.clone() as Arc<dyn MinusDatabase>,
-                            scheduler: self.scheduler.clone() as Arc<dyn MinusScheduler>,
-                            channels,
-                            agent: self.clone() as Arc<dyn MinusAgent>,
-                        };
-                        tools_lock.execute(tc.clone(), ctx).await?
+                    let result = if tool_decision.is_allowed() {
+                        let channels = self
+                            .channels
+                            .read()
+                            .await
+                            .as_ref()
+                            .and_then(|w| w.upgrade());
+
+                        if let Some(channels) = channels {
+                            let ctx = ToolContext {
+                                chat_id: incoming.chat_id.clone(),
+                                channel_id: incoming.channel_id.clone(),
+                                component_id: ComponentId::new("agent"),
+                                db: self.db.clone() as Arc<dyn MinusDatabase>,
+                                scheduler: self.scheduler.clone() as Arc<dyn MinusScheduler>,
+                                channels,
+                                agent: self.clone() as Arc<dyn MinusAgent>,
+                            };
+                            match tools_lock.execute(tc.clone(), ctx).await {
+                                Ok(res) => res,
+                                Err(e) => ToolResult {
+                                    tool_call_id: tc.id.clone(),
+                                    name: tc.name.clone(),
+                                    content: format!("Error: {}", e),
+                                    is_error: true,
+                                },
+                            }
+                        } else {
+                            ToolResult {
+                                tool_call_id: tc.id.clone(),
+                                name: tc.name.clone(),
+                                content: "Error: Channels service not available in agent".to_string(),
+                                is_error: true,
+                            }
+                        }
                     } else {
                         ToolResult {
                             tool_call_id: tc.id.clone(),
@@ -376,7 +429,13 @@ impl Agent {
             // Save assistant response
             let assistant_msg_id = Uuid::new_v4().to_string();
             self.db
-                .save_message(&assistant_msg_id, chat_id, "assistant", &final_content, None)
+                .save_message(
+                    &assistant_msg_id,
+                    chat_id,
+                    "assistant",
+                    &final_content,
+                    None,
+                )
                 .await?;
 
             return Ok(final_content);
@@ -388,15 +447,25 @@ impl Agent {
 impl traits::MinusAgent for Agent {
     async fn list_agents(self: Arc<Self>) -> Result<Vec<AgentStatus>> {
         let agents = self.registry.list().await;
-        Ok(agents.into_iter().map(|a| AgentStatus {
-            id: a.id,
-            name: a.name,
-            description: None,
-        }).collect())
+        Ok(agents
+            .into_iter()
+            .map(|a| AgentStatus {
+                id: a.id,
+                name: a.name,
+                description: None,
+            })
+            .collect())
     }
 
-    async fn call_agent(self: Arc<Self>, agent_id: &str, content: &str, chat_id: ChatId, channel_id: ChannelId) -> Result<String> {
+    async fn call_agent(
+        self: Arc<Self>,
+        agent_id: &str,
+        content: &str,
+        chat_id: ChatId,
+        channel_id: ChannelId,
+    ) -> Result<String> {
         let incoming = IncomingMessage::new(chat_id, channel_id, content.to_string());
-        self.handle_message_with_agent(agent_id, &incoming, None).await
+        self.handle_message_with_agent(agent_id, &incoming, None)
+            .await
     }
 }

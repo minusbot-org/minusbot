@@ -140,8 +140,8 @@ impl MinusScheduler for Runtime {
         minus_api::traits::MinusScheduler::delete_task(self.scheduler.as_ref(), id).await
     }
 
-    async fn create_task(&self, name: &str, schedule: &str, prompt: &str, target_chat_id: Option<&str>) -> Result<String> {
-        minus_api::traits::MinusScheduler::create_task(self.scheduler.as_ref(), name, schedule, prompt, target_chat_id).await
+    async fn create_task(&self, name: &str, schedule: &str, prompt: &str, target_chat_id: Option<&str>, generate: bool) -> Result<String> {
+        minus_api::traits::MinusScheduler::create_task(self.scheduler.as_ref(), name, schedule, prompt, target_chat_id, generate).await
     }
 }
 
