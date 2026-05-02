@@ -33,6 +33,10 @@ enum CliPacket {
         chat_id: ChatId, 
         messages: Vec<Message> 
     },
+    Disconnect {
+        reason: String,
+        error: String,
+    },
 }
 
 struct AppState {
@@ -283,6 +287,14 @@ async fn main() -> Result<()> {
                         let _ = printer.print(format!("{} \x1b[90m[{}]\x1b[0m {}", prefix, m.created_at, m.content));
                     }
                     let _ = printer.print(format!("\x1b[1;36m--------------------\x1b[0m\n"));
+                }
+                CliPacket::Disconnect { reason, error } => {
+                    let mut msg = format!("\n\x1b[1;31m[DISCONNECTED]\x1b[0m Reason: {}", reason);
+                    if !error.is_empty() {
+                        msg.push_str(&format!(" (Error: {})", error));
+                    }
+                    let _ = printer.print(msg);
+                    std::process::exit(0);
                 }
             }
         }

@@ -99,6 +99,17 @@ impl Runtime {
         self.integrations.write().await.push(integration);
     }
 
+    /// Stop all channels gracefully
+    pub async fn stop(&self) {
+        let channels = self.channels.read().await;
+        for (id, chan) in channels.iter() {
+            tracing::info!(channel_id = %id, "Stopping channel");
+            if let Err(e) = chan.stop().await {
+                tracing::error!(channel_id = %id, error = %e, "Failed to stop channel");
+            }
+        }
+    }
+
     /// Resolve a secret value by checking vault first, then env secrets.
     async fn resolve_secret_value(&self, key: &str) -> Result<Option<String>> {
         // Check vault first

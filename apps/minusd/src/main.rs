@@ -299,6 +299,11 @@ async fn main() -> Result<()> {
                     tracing::error!(error = %e, "Failed to send response");
                 }
             }
+            _ = tokio::signal::ctrl_c() => {
+                eprintln!("\nInterrupted by user (Ctrl+C)");
+                let _ = shutdown_tx.send(());
+                break;
+            }
             _ = shutdown_rx2.recv() => {
                 eprintln!("Shutting down...");
                 break;
@@ -306,6 +311,7 @@ async fn main() -> Result<()> {
         }
     }
 
+    runtime.stop().await;
     chan_handle.abort();
     Ok(())
 }

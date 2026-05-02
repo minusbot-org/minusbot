@@ -30,6 +30,10 @@ pub enum CliPacket {
         chat_id: ChatId, 
         messages: Vec<Message> 
     },
+    Disconnect {
+        reason: String,
+        error: String,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -298,6 +302,19 @@ impl Channel for CliChannel {
                 }
             }
         }
+    }
+
+    async fn stop(&self) -> Result<()> {
+        let packet = CliPacket::Disconnect {
+            reason: "daemon_shutdown".into(),
+            error: "".into(),
+        };
+        let json = serde_json::to_string(&packet)?;
+        let streams = self.active_streams.lock().await;
+        for (_, tx) in streams.iter() {
+            let _ = tx.send(json.clone()).await;
+        }
+        Ok(())
     }
 
     async fn send_message(&self, packet: MessagePacket) -> Result<()> {
