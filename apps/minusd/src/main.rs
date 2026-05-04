@@ -11,6 +11,7 @@ use minus_provider_deepseek::DeepSeekProvider;
 use minus_provider_groq::GroqProvider;
 use minus_provider_openai::OpenAiProvider;
 use minus_provider_openrouter::OpenRouterProvider;
+use minus_provider_together_ai::TogetherAiProvider;
 use minus_providers::ProviderRegistry;
 use minus_runtime::Runtime;
 use minus_scheduler::Scheduler;
@@ -142,6 +143,19 @@ async fn main() -> Result<()> {
             deepseek_key,
             deepseek_base,
             Some(deepseek_cfg),
+        )));
+
+        let together_ai_key = sec
+            .get("PROVIDER_TOGETHER_AI_API_KEY")
+            .map(|s| s.to_string());
+        let together_ai_base = sec
+            .get("PROVIDER_TOGETHER_AI_ENDPOINT")
+            .map(|s| s.to_string());
+        let together_ai_cfg = data_dir.component_config_path("provider", "together-ai");
+        provider_reg.register(Arc::new(TogetherAiProvider::new(
+            together_ai_key,
+            together_ai_base,
+            Some(together_ai_cfg),
         )));
 
         let custom_openai_key = sec

@@ -22,6 +22,7 @@ minus-provider-openai = { path = "../../providers/minus-provider-openai" }
 minus-provider-openrouter = { path = "../../providers/minus-provider-openrouter" }
 minus-provider-groq = { path = "../../providers/minus-provider-groq" }
 minus-provider-deepseek = { path = "../../providers/minus-provider-deepseek" }
+minus-provider-together-ai = { path = "../../providers/minus-provider-together-ai" }
 minus-provider-google = { path = "../../providers/minus-provider-google" }
 minus-provider-mistral = { path = "../../providers/minus-provider-mistral" }
 minus-channel-cli = { path = "../../channels/minus-channel-cli" }

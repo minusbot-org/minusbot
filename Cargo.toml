@@ -21,6 +21,7 @@ members = [
     "providers/minus-provider-openrouter",
     "providers/minus-provider-groq",
     "providers/minus-provider-deepseek",
+    "providers/minus-provider-together-ai",
     "providers/minus-provider-google",
     "providers/minus-provider-mistral",
 ]
