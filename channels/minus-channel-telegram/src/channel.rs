@@ -11,6 +11,7 @@ use teloxide::requests::Requester;
 use teloxide::payloads::SendMessageSetters;
 use rand::{distributions::Alphanumeric, Rng};
 
+#[derive(Clone)]
 pub struct TelegramChannel {
     message_tx: mpsc::Sender<IncomingMessage>,
     secrets: Arc<dyn MinusSecretStore>,
@@ -19,6 +20,7 @@ pub struct TelegramChannel {
     setup_pin: Arc<RwLock<Option<String>>>,
     bot: Arc<RwLock<Option<Bot>>>,
     whitelisted_user_id: Arc<RwLock<Option<Option<String>>>>,
+    active_chat_id: Arc<RwLock<Option<ChatId>>>,
     pending_commands: Arc<RwLock<Option<Vec<CommandDefinition>>>>,
 }
 
@@ -39,6 +41,7 @@ impl TelegramChannel {
             setup_pin: Arc::new(RwLock::new(None)),
             bot: Arc::new(RwLock::new(None)),
             whitelisted_user_id: Arc::new(RwLock::new(None)),
+            active_chat_id: Arc::new(RwLock::new(None)),
             pending_commands: Arc::new(RwLock::new(None)),
         }
     }
@@ -69,10 +72,21 @@ impl Channel for TelegramChannel {
     }
 
     async fn get_active_chat(&self) -> Option<ChatId> {
-        None
+        let mut cache = self.active_chat_id.write().await;
+        if cache.is_none() {
+            if let Ok(Some(id)) = self.config.read_config("active_chat_id").await {
+                *cache = Some(ChatId(id));
+            } else {
+                *cache = Some(ChatId(format!("{}-chat", minus_api::Channel::id(self))));
+            }
+        }
+        cache.clone()
     }
 
-    async fn set_active_chat(&self, _chat_id: ChatId) -> Result<()> {
+    async fn set_active_chat(&self, chat_id: ChatId) -> Result<()> {
+        let mut active = self.active_chat_id.write().await;
+        *active = Some(chat_id.clone());
+        self.config.set_config("active_chat_id", &chat_id.0).await?;
         Ok(())
     }
 
@@ -230,11 +244,23 @@ impl Channel for TelegramChannel {
                     }),
             );
 
-        Dispatcher::builder(bot, handler)
-            .enable_ctrlc_handler()
-            .build()
-            .dispatch()
-            .await;
+        let mut dispatcher = Dispatcher::builder(bot, handler)
+            .build();
+
+        let token = dispatcher.shutdown_token();
+        let mut shutdown = _ctx.shutdown.subscribe();
+
+        tokio::select! {
+            _ = dispatcher.dispatch() => {
+                tracing::info!("Telegram dispatcher finished");
+            }
+            _ = shutdown.recv() => {
+                tracing::info!("Telegram channel shutting down...");
+                if let Ok(fut) = token.shutdown() {
+                    fut.await;
+                }
+            }
+        }
 
         Ok(())
     }
@@ -298,6 +324,36 @@ impl Channel for TelegramChannel {
     }
 
     fn config(&self) -> Option<Arc<dyn ConfigProvider>> {
-        Some(self.config.clone())
+        Some(Arc::new(self.clone()))
+    }
+}
+
+#[async_trait]
+impl ConfigProvider for TelegramChannel {
+    fn id(&self) -> &'static str {
+        self.config.id()
+    }
+
+    fn list_keys(&self) -> Vec<String> {
+        let mut keys = self.config.list_keys();
+        if !keys.contains(&"active_chat_id".to_string()) {
+            keys.push("active_chat_id".to_string());
+        }
+        keys
+    }
+
+    async fn read_config(&self, key: &str) -> Result<Option<String>> {
+        if key == "active_chat_id" {
+            return Ok(self.get_active_chat().await.map(|id| id.0));
+        }
+        self.config.read_config(key).await
+    }
+
+    async fn set_config(&self, key: &str, value: &str) -> Result<()> {
+        if key == "active_chat_id" {
+            self.set_active_chat(ChatId(value.to_string())).await?;
+            return Ok(());
+        }
+        self.config.set_config(key, value).await
     }
 }

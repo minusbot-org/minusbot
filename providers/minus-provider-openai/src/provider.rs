@@ -68,7 +68,7 @@ impl TextProvider for OpenAiProvider {
         let messages: Vec<ApiMessage> = request.messages.iter().map(|m| {
             let mut msg = ApiMessage {
                 role: m.role.to_string(),
-                content: Some(m.content.clone()),
+                content: m.content.clone(),
                 tool_calls: None,
                 tool_call_id: m.tool_call_id.clone(),
                 name: m.name.clone(),

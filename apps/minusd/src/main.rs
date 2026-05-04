@@ -243,6 +243,7 @@ async fn main() -> Result<()> {
     let ctx = ChannelContext {
         channel_id: ChannelId(minus_api::Channel::id(chan.as_ref()).to_string()),
         config_dir: data_dir.config_dir(),
+        shutdown: shutdown_tx.clone(),
     };
     let chan_handle = tokio::spawn(async move {
         if let Err(e) = chan.start(ctx).await {
@@ -260,6 +261,7 @@ async fn main() -> Result<()> {
     let ctx_tg = ChannelContext {
         channel_id: ChannelId("telegram".into()),
         config_dir: data_dir.config_dir(),
+        shutdown: shutdown_tx.clone(),
     };
     let tg_chan_handle = tokio::spawn(async move {
         if let Err(e) = chan_tg.start(ctx_tg).await {

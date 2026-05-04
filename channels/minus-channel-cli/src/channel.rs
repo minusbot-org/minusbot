@@ -44,6 +44,7 @@ pub enum CliProtocol {
 }
 
 /// The CLI channel listens on a Unix domain socket or TCP socket.
+#[derive(Clone)]
 pub struct CliChannel {
     message_tx: mpsc::Sender<IncomingMessage>,
     active_streams: Arc<Mutex<Vec<(ChatId, mpsc::Sender<String>)>>>,
@@ -66,7 +67,7 @@ impl CliChannel {
             active_streams: Arc::new(Mutex::new(Vec::new())),
             config,
             enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
-            active_chat_id: Arc::new(RwLock::new(Some(ChatId("cli:default".into())))),
+            active_chat_id: Arc::new(RwLock::new(None)),
             context: Arc::new(RwLock::new(None)),
         }
     }
@@ -187,12 +188,21 @@ impl Channel for CliChannel {
     }
 
     async fn get_active_chat(&self) -> Option<ChatId> {
-        self.active_chat_id.read().await.clone()
+        let mut cache = self.active_chat_id.write().await;
+        if cache.is_none() {
+            if let Ok(Some(id)) = self.config.read_config("active_chat_id").await {
+                *cache = Some(ChatId(id));
+            } else {
+                *cache = Some(ChatId(format!("{}-chat", minus_api::Channel::id(self))));
+            }
+        }
+        cache.clone()
     }
 
     async fn set_active_chat(&self, chat_id: ChatId) -> Result<()> {
         let mut active = self.active_chat_id.write().await;
-        *active = Some(chat_id);
+        *active = Some(chat_id.clone());
+        self.config.set_config("active_chat_id", &chat_id.0).await?;
         Ok(())
     }
 
@@ -267,25 +277,35 @@ impl Channel for CliChannel {
 
                 tracing::info!(path = %socket_path.display(), "Unix CLI channel listening");
 
+                let mut shutdown = ctx.shutdown.subscribe();
                 loop {
                     if !self.is_enabled() {
                         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                         continue;
                     }
-                    match listener.accept().await {
-                        Ok((stream, _)) => {
-                            let tx = message_tx.clone();
-                            let streams = active_streams.clone();
-                            let s = secret.clone();
-                            tokio::spawn(async move {
-                                if let Err(e) = Self::handle_stream(stream, tx, streams, s).await {
-                                    tracing::error!(error = %e, "Unix client error");
+                    tokio::select! {
+                        res = listener.accept() => {
+                            match res {
+                                Ok((stream, _)) => {
+                                    let tx = message_tx.clone();
+                                    let streams = active_streams.clone();
+                                    let s = secret.clone();
+                                    tokio::spawn(async move {
+                                        if let Err(e) = Self::handle_stream(stream, tx, streams, s).await {
+                                            tracing::error!(error = %e, "Unix client error");
+                                        }
+                                    });
                                 }
-                            });
+                                Err(e) => tracing::error!(error = %e, "Unix listener accept error"),
+                            }
                         }
-                        Err(e) => tracing::error!(error = %e, "Unix listener accept error"),
+                        _ = shutdown.recv() => {
+                            tracing::info!("Unix CLI channel shutting down...");
+                            break;
+                        }
                     }
                 }
+                Ok(())
             }
             CliProtocol::Tcp(addr) => {
                 let listener = TcpListener::bind(addr)
@@ -294,25 +314,35 @@ impl Channel for CliChannel {
 
                 tracing::info!(addr = %addr, "TCP CLI channel listening");
 
+                let mut shutdown = ctx.shutdown.subscribe();
                 loop {
                     if !self.is_enabled() {
                         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                         continue;
                     }
-                    match listener.accept().await {
-                        Ok((stream, _)) => {
-                            let tx = message_tx.clone();
-                            let streams = active_streams.clone();
-                            let s = secret.clone();
-                            tokio::spawn(async move {
-                                if let Err(e) = Self::handle_stream(stream, tx, streams, s).await {
-                                    tracing::error!(error = %e, "TCP client error");
+                    tokio::select! {
+                        res = listener.accept() => {
+                            match res {
+                                Ok((stream, _)) => {
+                                    let tx = message_tx.clone();
+                                    let streams = active_streams.clone();
+                                    let s = secret.clone();
+                                    tokio::spawn(async move {
+                                        if let Err(e) = Self::handle_stream(stream, tx, streams, s).await {
+                                            tracing::error!(error = %e, "TCP client error");
+                                        }
+                                    });
                                 }
-                            });
+                                Err(e) => tracing::error!(error = %e, "TCP listener accept error"),
+                            }
                         }
-                        Err(e) => tracing::error!(error = %e, "TCP listener accept error"),
+                        _ = shutdown.recv() => {
+                            tracing::info!("TCP CLI channel shutting down...");
+                            break;
+                        }
                     }
                 }
+                Ok(())
             }
         }
     }
@@ -359,6 +389,10 @@ impl Channel for CliChannel {
         })).await
     }
 
+    fn config(&self) -> Option<Arc<dyn ConfigProvider>> {
+        Some(Arc::new(self.clone()))
+    }
+
     async fn on_chat_switch(&self, chat_id: &ChatId, messages: Vec<Message>) -> Result<()> {
         let packet = CliPacket::ChatHistory {
             chat_id: chat_id.clone(),
@@ -375,14 +409,25 @@ impl ConfigProvider for CliChannel {
     }
 
     fn list_keys(&self) -> Vec<String> {
-        self.config.list_keys()
+        let mut keys = self.config.list_keys();
+        if !keys.contains(&"active_chat_id".to_string()) {
+            keys.push("active_chat_id".to_string());
+        }
+        keys
     }
 
     async fn read_config(&self, key: &str) -> Result<Option<String>> {
+        if key == "active_chat_id" {
+            return Ok(self.get_active_chat().await.map(|id| id.0));
+        }
         self.config.read_config(key).await
     }
 
     async fn set_config(&self, key: &str, value: &str) -> Result<()> {
+        if key == "active_chat_id" {
+            self.set_active_chat(ChatId(value.to_string())).await?;
+            return Ok(());
+        }
         self.config.set_config(key, value).await
     }
 }

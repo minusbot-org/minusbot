@@ -278,7 +278,7 @@ pub struct ProviderRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderMessage {
     pub role: Role,
-    pub content: String,
+    pub content: Option<String>,
     pub tool_calls: Option<Vec<ToolCall>>,
     pub tool_call_id: Option<String>,
     pub name: Option<String>,

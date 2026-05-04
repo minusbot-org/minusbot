@@ -117,6 +117,7 @@ pub trait ConfigProvider: Send + Sync {
 pub struct ChannelContext {
     pub channel_id: ChannelId,
     pub config_dir: std::path::PathBuf,
+    pub shutdown: tokio::sync::broadcast::Sender<()>,
 }
 
 pub struct ToolContext {

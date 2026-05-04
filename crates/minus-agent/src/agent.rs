@@ -192,7 +192,7 @@ impl Agent {
         let mut messages = Vec::new();
         messages.push(ProviderMessage {
             role: Role::System,
-            content: system_prompt,
+            content: Some(system_prompt),
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -215,7 +215,8 @@ impl Agent {
             let tool_calls = metadata
                 .as_ref()
                 .and_then(|m| m.get("tool_calls"))
-                .and_then(|tc| serde_json::from_value::<Vec<ToolCall>>(tc.clone()).ok());
+                .and_then(|tc| serde_json::from_value::<Vec<ToolCall>>(tc.clone()).ok())
+                .filter(|v| !v.is_empty());
 
             let tool_call_id = metadata
                 .as_ref()
@@ -229,9 +230,15 @@ impl Agent {
                 .and_then(|n| n.as_str())
                 .map(|s| s.to_string());
 
+            let content = if msg.content.is_empty() && role == Role::Assistant && tool_calls.is_some() {
+                None
+            } else {
+                Some(msg.content.clone())
+            };
+
             messages.push(ProviderMessage {
                 role,
-                content: msg.content.clone(),
+                content,
                 tool_calls,
                 tool_call_id,
                 name,
@@ -322,7 +329,7 @@ impl Agent {
 
                 request.messages.push(ProviderMessage {
                     role: Role::Assistant,
-                    content: assistant_content,
+                    content: if assistant_content.is_empty() { None } else { Some(assistant_content) },
                     tool_calls: Some(response.tool_calls.clone()),
                     tool_call_id: None,
                     name: None,
@@ -410,7 +417,7 @@ impl Agent {
 
                     request.messages.push(ProviderMessage {
                         role: Role::Tool,
-                        content: result.content,
+                        content: Some(result.content),
                         tool_calls: None,
                         tool_call_id: Some(result.tool_call_id),
                         name: Some(result.name),

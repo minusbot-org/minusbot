@@ -10,7 +10,7 @@ impl Command for ChannelsCommand {
         CommandDefinition {
             name: "channels".into(),
             description: "Manage communication channels.".into(),
-            usage: "/channels <list|enable|disable|config|setup> [args]".into(),
+            usage: "/channels <list|enable|disable|config|setup|setchat> [args]".into(),
             category: "system".into(),
             aliases: vec!["chan".into()],
             min_args: 0,
@@ -96,7 +96,14 @@ impl Command for ChannelsCommand {
                 let pin = chan.setup().await?;
                 Ok(format!("Setup initiated for channel '{}'.\nUse the following PIN: {}", id, pin))
             }
-            _ => bail!("Unknown subcommand: {}. Use list, enable, disable, config, or setup.", subcommand),
+            "setchat" => {
+                let id = args.get(1).context("Missing channel ID: /channels setchat <id> <chat_id>")?;
+                let chat_id = args.get(2).context("Missing chat ID: /channels setchat <id> <chat_id>")?;
+                let chan = ctx.channels.get_channel(id).await.context("Channel not found")?;
+                chan.set_active_chat(minus_api::ChatId(chat_id.to_string())).await?;
+                Ok(format!("Active chat for channel '{}' set to '{}'.", id, chat_id))
+            }
+            _ => bail!("Unknown subcommand: {}. Use list, enable, disable, config, setup, or setchat.", subcommand),
         }
     }
 }
