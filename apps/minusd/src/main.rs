@@ -234,11 +234,20 @@ async fn main() -> Result<()> {
             Some(google_cfg),
         )));
 
-        let mistral_key = sec.get("PROVIDER_MISTRAL_API_KEY").map(|s| s.to_string());
-        let mistral_cfg = data_dir.component_config_path("provider", "mistral");
-        provider_reg.register(Arc::new(minus_provider_mistral::MistralAiProvider::new(
-            mistral_key,
-            Some(mistral_cfg),
+        let mistral_platform_key = sec.get("PROVIDER_MISTRAL_PLATFORM_API_KEY").or(sec.get("PROVIDER_MISTRAL_API_KEY")).map(|s| s.to_string());
+        let mistral_platform_cfg = data_dir.component_config_path("provider", "mistral-platform");
+        provider_reg.register(Arc::new(minus_provider_mistral::MistralPlatformProvider::new(
+            mistral_platform_key,
+            Some(mistral_platform_cfg),
+        )));
+
+        let mistral_codestral_key = sec.get("PROVIDER_MISTRAL_CODESTRAL_API_KEY").map(|s| s.to_string());
+        let mistral_codestral_base = sec.get("PROVIDER_MISTRAL_CODESTRAL_ENDPOINT").map(|s| s.to_string());
+        let mistral_codestral_cfg = data_dir.component_config_path("provider", "mistral-codestral");
+        provider_reg.register(Arc::new(minus_provider_mistral::MistralCodestralProvider::new(
+            mistral_codestral_key,
+            mistral_codestral_base,
+            Some(mistral_codestral_cfg),
         )));
     }
 

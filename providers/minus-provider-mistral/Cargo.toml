@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 minus-api = { path = "../../crates/minus-api" }
+minus-provider-openai = { path = "../minus-provider-openai" }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 reqwest = { workspace = true }

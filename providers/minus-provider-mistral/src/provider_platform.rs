@@ -4,16 +4,16 @@ use minus_api::*;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-pub struct MistralAiProvider {
+pub struct MistralPlatformProvider {
     api_key: Option<String>,
     base_url: String,
     client: reqwest::Client,
     config: Option<Arc<dyn ConfigProvider>>,
 }
 
-impl MistralAiProvider {
+impl MistralPlatformProvider {
     pub fn new(api_key: Option<String>, config_path: Option<std::path::PathBuf>) -> Self {
-        let id = "provider-mistral";
+        let id = "provider-mistral-platform";
         let config = config_path
             .map(|p| Arc::new(FileConfigProvider::new(id, p)) as Arc<dyn ConfigProvider>);
 
@@ -30,9 +30,9 @@ impl MistralAiProvider {
 }
 
 #[async_trait]
-impl Provider for MistralAiProvider {
+impl Provider for MistralPlatformProvider {
     fn id(&self) -> &'static str {
-        "mistral"
+        "mistral-platform"
     }
 
     fn name(&self) -> &'static str {
@@ -67,7 +67,7 @@ impl Provider for MistralAiProvider {
 }
 
 #[async_trait]
-impl TextProvider for MistralAiProvider {
+impl TextProvider for MistralPlatformProvider {
     async fn generate_text(&self, request: ProviderRequest) -> Result<ProviderResponse> {
         let api_key = &request.options.api_key;
         if api_key.is_empty() {
@@ -399,3 +399,4 @@ struct ApiUsage {
     completion_tokens: Option<u32>,
     total_tokens: Option<u32>,
 }
+
