@@ -1,22 +1,91 @@
+use crate::{ArgSpec, CommandSpec, ValueType};
 use anyhow::Result;
 use async_trait::async_trait;
-use minus_api::{
-    ChatId, Command, CommandContext, CommandDefinition, NotificationPacket, NotificationSeverity,
-};
+use minus_api::{ChatId, Command, CommandContext, NotificationPacket, NotificationSeverity};
 
 pub struct ChatListCommand;
 
+pub fn spec() -> CommandSpec {
+    CommandSpec::new(
+        "chat",
+        "/chat <list|new|switch|rename|read>",
+        "Manage chats",
+    )
+    .category("chat")
+    .command_alias("c")
+    .strict_subcommands()
+    .handler(|args, ctx| Box::pin(async move { ChatListCommand.execute(args, ctx).await }))
+    .subcommand(
+        CommandSpec::new("list", "/chat list", "List chats").handler(|args, ctx| {
+            Box::pin(async move {
+                let mut full = vec!["list".to_string()];
+                full.extend(args);
+                ChatListCommand.execute(full, ctx).await
+            })
+        }),
+    )
+    .subcommand(
+        CommandSpec::new("switch", "/chat switch <id>", "Switch to a chat")
+            .arg(ArgSpec::required("id", "Chat id"))
+            .handler(|args, ctx| {
+                Box::pin(async move {
+                    let mut full = vec!["switch".to_string()];
+                    full.extend(args);
+                    ChatListCommand.execute(full, ctx).await
+                })
+            }),
+    )
+    .subcommand(
+        CommandSpec::new("s", "/chat s <id>", "Switch to a chat")
+            .arg(ArgSpec::required("id", "Chat id"))
+            .handler(|args, ctx| {
+                Box::pin(async move {
+                    let mut full = vec!["s".to_string()];
+                    full.extend(args);
+                    ChatListCommand.execute(full, ctx).await
+                })
+            }),
+    )
+    .subcommand(
+        CommandSpec::new("new", "/chat new [title]", "Create a new chat")
+            .arg(ArgSpec::optional("title", "Chat title").variadic())
+            .handler(|args, ctx| {
+                Box::pin(async move {
+                    let mut full = vec!["new".to_string()];
+                    full.extend(args);
+                    ChatListCommand.execute(full, ctx).await
+                })
+            }),
+    )
+    .subcommand(
+        CommandSpec::new("rename", "/chat rename <title>", "Rename current chat")
+            .arg(ArgSpec::required("title", "New chat title").variadic())
+            .handler(|args, ctx| {
+                Box::pin(async move {
+                    let mut full = vec!["rename".to_string()];
+                    full.extend(args);
+                    ChatListCommand.execute(full, ctx).await
+                })
+            }),
+    )
+    .subcommand(
+        CommandSpec::new("read", "/chat read [id] [n]", "Read messages from a chat")
+            .arg(ArgSpec::optional("id", "Chat id"))
+            .arg(ArgSpec::optional("n", "Message count").value_type(ValueType::Integer))
+            .handler(|args, ctx| {
+                Box::pin(async move {
+                    let mut full = vec!["read".to_string()];
+                    full.extend(args);
+                    ChatListCommand.execute(full, ctx).await
+                })
+            }),
+    )
+}
+
 #[async_trait]
 impl Command for ChatListCommand {
-    fn definition(&self) -> CommandDefinition {
-        CommandDefinition {
-            name: "chat".into(),
-            description: "Manage chats".into(),
-            aliases: vec!["c".into()],
-            usage: "/chat <list|new|switch|rename|read>".into(),
-            category: "chat".into(),
-            min_args: 0,
-        }
+    fn spec(&self) -> CommandSpec {
+        spec()
     }
 
     async fn execute(&self, args: Vec<String>, ctx: CommandContext) -> Result<String> {

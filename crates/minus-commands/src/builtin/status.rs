@@ -1,20 +1,21 @@
+use crate::CommandSpec;
 use anyhow::Result;
 use async_trait::async_trait;
-use minus_api::{Command, CommandContext, CommandDefinition};
+use minus_api::{Command, CommandContext};
 
 pub struct StatusCommand;
 
+pub fn spec() -> CommandSpec {
+    CommandSpec::new("status", "/status", "Show system status")
+        .category("core")
+        .command_alias("st")
+        .handler(|args, ctx| Box::pin(async move { StatusCommand.execute(args, ctx).await }))
+}
+
 #[async_trait]
 impl Command for StatusCommand {
-    fn definition(&self) -> CommandDefinition {
-        CommandDefinition {
-            name: "status".into(),
-            description: "Show system status".into(),
-            aliases: vec!["st".into()],
-            usage: "/status".into(),
-            category: "core".into(),
-            min_args: 0,
-        }
+    fn spec(&self) -> CommandSpec {
+        spec()
     }
 
     async fn execute(&self, _args: Vec<String>, _ctx: CommandContext) -> Result<String> {

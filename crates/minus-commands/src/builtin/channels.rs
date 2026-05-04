@@ -1,20 +1,66 @@
+use crate::{ArgSpec, CommandSpec};
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
-use minus_api::{Command, CommandContext, CommandDefinition};
+use minus_api::{Command, CommandContext};
 
 pub struct ChannelsCommand;
 
+pub fn spec() -> CommandSpec {
+    CommandSpec::new(
+        "channels",
+        "/channels <list|enable|disable|config|setup|setchat> [args]",
+        "Manage communication channels",
+    )
+    .category("system")
+    .command_alias("chan")
+    .strict_subcommands()
+    .handler(|args, ctx| Box::pin(async move { ChannelsCommand.execute(args, ctx).await }))
+    .subcommand(sub("list", "/channels list", "List channels"))
+    .subcommand(
+        sub("enable", "/channels enable <id>", "Enable a channel")
+            .arg(ArgSpec::required("id", "Channel id")),
+    )
+    .subcommand(
+        sub("disable", "/channels disable <id>", "Disable a channel")
+            .arg(ArgSpec::required("id", "Channel id")),
+    )
+    .subcommand(
+        sub(
+            "config",
+            "/channels config <id> [list|get|set] [key] [value]",
+            "Manage channel configuration",
+        )
+        .arg(ArgSpec::required("id", "Channel id")),
+    )
+    .subcommand(
+        sub("setup", "/channels setup <id>", "Start channel setup")
+            .arg(ArgSpec::required("id", "Channel id")),
+    )
+    .subcommand(
+        sub(
+            "setchat",
+            "/channels setchat <id> <chat_id>",
+            "Set the active chat for a channel",
+        )
+        .arg(ArgSpec::required("id", "Channel id"))
+        .arg(ArgSpec::required("chat_id", "Chat id")),
+    )
+}
+
+fn sub(name: &'static str, usage: &'static str, about: &'static str) -> CommandSpec {
+    CommandSpec::new(name, usage, about).handler(move |args, ctx| {
+        Box::pin(async move {
+            let mut full = vec![name.to_string()];
+            full.extend(args);
+            ChannelsCommand.execute(full, ctx).await
+        })
+    })
+}
+
 #[async_trait]
 impl Command for ChannelsCommand {
-    fn definition(&self) -> CommandDefinition {
-        CommandDefinition {
-            name: "channels".into(),
-            description: "Manage communication channels.".into(),
-            usage: "/channels <list|enable|disable|config|setup|setchat> [args]".into(),
-            category: "system".into(),
-            aliases: vec!["chan".into()],
-            min_args: 0,
-        }
+    fn spec(&self) -> CommandSpec {
+        spec()
     }
 
     async fn execute(&self, args: Vec<String>, ctx: CommandContext) -> Result<String> {

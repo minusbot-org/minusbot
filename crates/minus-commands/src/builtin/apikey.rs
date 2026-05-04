@@ -1,20 +1,27 @@
+use crate::{ArgSpec, CommandSpec};
 use anyhow::Result;
 use async_trait::async_trait;
-use minus_api::{Command, CommandContext, CommandDefinition};
+use minus_api::{Command, CommandContext};
 
 pub struct ApikeyCommand;
 
+pub fn spec() -> CommandSpec {
+    CommandSpec::new(
+        "apikey",
+        "/apikey <provider> <key>",
+        "Set a provider API key",
+    )
+    .category("setup")
+    .arg(ArgSpec::required("provider", "Provider id"))
+    .arg(ArgSpec::required("key", "API key value"))
+    .example("/apikey openrouter sk-or-v1-...")
+    .handler(|args, ctx| Box::pin(async move { ApikeyCommand.execute(args, ctx).await }))
+}
+
 #[async_trait]
 impl Command for ApikeyCommand {
-    fn definition(&self) -> CommandDefinition {
-        CommandDefinition {
-            name: "apikey".into(),
-            description: "Shortcut to set provider API keys".into(),
-            aliases: vec![],
-            usage: "/apikey <provider> <key>".into(),
-            category: "setup".into(),
-            min_args: 2,
-        }
+    fn spec(&self) -> CommandSpec {
+        spec()
     }
 
     async fn execute(&self, args: Vec<String>, ctx: CommandContext) -> Result<String> {

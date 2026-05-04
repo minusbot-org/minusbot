@@ -1,20 +1,21 @@
+use crate::CommandSpec;
 use anyhow::Result;
 use async_trait::async_trait;
-use minus_api::{Command, CommandContext, CommandDefinition};
+use minus_api::{Command, CommandContext};
 
 pub struct ShutdownCommand;
 
+pub fn shutdown_spec() -> CommandSpec {
+    CommandSpec::new("shutdown", "/shutdown", "Shutdown the daemon gracefully")
+        .category("core")
+        .command_alias("exit-daemon")
+        .handler(|args, ctx| Box::pin(async move { ShutdownCommand.execute(args, ctx).await }))
+}
+
 #[async_trait]
 impl Command for ShutdownCommand {
-    fn definition(&self) -> CommandDefinition {
-        CommandDefinition {
-            name: "shutdown".into(),
-            description: "Shutdown the daemon gracefully".into(),
-            aliases: vec!["exit-daemon".into()],
-            usage: "/shutdown".into(),
-            category: "core".into(),
-            min_args: 0,
-        }
+    fn spec(&self) -> CommandSpec {
+        shutdown_spec()
     }
 
     async fn execute(&self, _args: Vec<String>, ctx: CommandContext) -> Result<String> {
@@ -30,17 +31,16 @@ impl Command for ShutdownCommand {
 
 pub struct ClearCommand;
 
+pub fn clear_spec() -> CommandSpec {
+    CommandSpec::new("clear", "/clear", "Clear chat history")
+        .category("chat")
+        .handler(|args, ctx| Box::pin(async move { ClearCommand.execute(args, ctx).await }))
+}
+
 #[async_trait]
 impl Command for ClearCommand {
-    fn definition(&self) -> CommandDefinition {
-        CommandDefinition {
-            name: "clear".into(),
-            description: "Clear chat history".into(),
-            aliases: vec![],
-            usage: "/clear".into(),
-            category: "chat".into(),
-            min_args: 0,
-        }
+    fn spec(&self) -> CommandSpec {
+        clear_spec()
     }
 
     async fn execute(&self, _args: Vec<String>, ctx: CommandContext) -> Result<String> {

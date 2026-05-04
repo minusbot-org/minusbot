@@ -1,20 +1,20 @@
+use crate::CommandSpec;
 use anyhow::Result;
 use async_trait::async_trait;
-use minus_api::{Command, CommandContext, CommandDefinition};
+use minus_api::{Command, CommandContext};
 
 pub struct ToolsCommand;
 
+pub fn spec() -> CommandSpec {
+    CommandSpec::new("tools", "/tools", "List registered tools")
+        .category("system")
+        .handler(|args, ctx| Box::pin(async move { ToolsCommand.execute(args, ctx).await }))
+}
+
 #[async_trait]
 impl Command for ToolsCommand {
-    fn definition(&self) -> CommandDefinition {
-        CommandDefinition {
-            name: "tools".into(),
-            description: "List all registered tools.".into(),
-            aliases: vec![],
-            usage: "/tools".into(),
-            category: "system".into(),
-            min_args: 0,
-        }
+    fn spec(&self) -> CommandSpec {
+        spec()
     }
 
     async fn execute(&self, _args: Vec<String>, ctx: CommandContext) -> Result<String> {

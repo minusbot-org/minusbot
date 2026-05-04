@@ -1,20 +1,53 @@
+use crate::{ArgSpec, CommandSpec};
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
-use minus_api::{Command, CommandContext, CommandDefinition};
+use minus_api::{Command, CommandContext};
 
 pub struct SchedulerCommand;
 
+pub fn spec() -> CommandSpec {
+    CommandSpec::new(
+        "scheduler",
+        "/scheduler <list|delete|search> [args]",
+        "Manage scheduled tasks",
+    )
+    .category("system")
+    .command_alias("sched")
+    .strict_subcommands()
+    .handler(|args, ctx| Box::pin(async move { SchedulerCommand.execute(args, ctx).await }))
+    .subcommand(sub("list", "/scheduler list", "List scheduled tasks"))
+    .subcommand(
+        sub(
+            "delete",
+            "/scheduler delete <id>",
+            "Delete a scheduled task",
+        )
+        .arg(ArgSpec::required("id", "Task id")),
+    )
+    .subcommand(
+        sub(
+            "search",
+            "/scheduler search <term>",
+            "Search scheduled tasks",
+        )
+        .arg(ArgSpec::required("term", "Search term")),
+    )
+}
+
+fn sub(name: &'static str, usage: &'static str, about: &'static str) -> CommandSpec {
+    CommandSpec::new(name, usage, about).handler(move |args, ctx| {
+        Box::pin(async move {
+            let mut full = vec![name.to_string()];
+            full.extend(args);
+            SchedulerCommand.execute(full, ctx).await
+        })
+    })
+}
+
 #[async_trait]
 impl Command for SchedulerCommand {
-    fn definition(&self) -> CommandDefinition {
-        CommandDefinition {
-            name: "scheduler".into(),
-            description: "Manage scheduled tasks.".into(),
-            usage: "/scheduler <list|delete|search> [args]".into(),
-            category: "system".into(),
-            aliases: vec!["sched".into()],
-            min_args: 0,
-        }
+    fn spec(&self) -> CommandSpec {
+        spec()
     }
 
     async fn execute(&self, args: Vec<String>, ctx: CommandContext) -> Result<String> {

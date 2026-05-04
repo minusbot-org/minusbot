@@ -100,14 +100,15 @@ impl Agent {
             Some(p) => p,
             None => {
                 return Ok(
-                    "No LLM provider is configured. Use `/providers <id>` to set one.".to_string(),
+                    "No LLM provider is configured. Use `/llm provider <id>` to set one."
+                        .to_string(),
                 )
             }
         };
 
         if !provider.is_ready().await {
             return Ok(format!(
-                "Provider '{}' is not ready. Use '/models' to select a model.",
+                "Provider '{}' is not ready. Use '/llm model' to select a model.",
                 provider.id()
             ));
         }

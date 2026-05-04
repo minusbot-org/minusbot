@@ -46,64 +46,64 @@ minusbot supports multiple LLM providers. Here's how to configure OpenRouter:
 
 ```bash
 minusbot> /env set SECRET_OPENROUTER_API_KEY sk-or-v1-...
-minusbot> /providers set-default openrouter
-minusbot> /config set provider.model openai/gpt-4o-mini
+minusbot> /llm provider openrouter
+minusbot> /llm model openai/gpt-4o-mini
 ```
 
 Groq is available as an OpenAI-compatible provider:
 
 ```bash
 minusbot> /apikey groq gsk_...
-minusbot> /providers set groq
-minusbot> /models llama-3.1-8b-instant
+minusbot> /llm provider groq
+minusbot> /llm model llama-3.1-8b-instant
 ```
 
 DeepSeek is available as an OpenAI-compatible provider:
 
 ```bash
 minusbot> /apikey deepseek sk-...
-minusbot> /providers set deepseek
-minusbot> /models deepseek-chat
+minusbot> /llm provider deepseek
+minusbot> /llm model deepseek-chat
 ```
 
 Together AI is available as an OpenAI-compatible provider:
 
 ```bash
 minusbot> /apikey together-ai ...
-minusbot> /providers set together-ai
-minusbot> /models meta-llama/Llama-3.3-70B-Instruct-Turbo
+minusbot> /llm provider together-ai
+minusbot> /llm model meta-llama/Llama-3.3-70B-Instruct-Turbo
 ```
 
 Baseten is available as an OpenAI-compatible provider:
 
 ```bash
 minusbot> /apikey baseten ...
-minusbot> /providers set baseten
-minusbot> /models <model-id>
+minusbot> /llm provider baseten
+minusbot> /llm model <model-id>
 ```
 
 Cerebras is available as an OpenAI-compatible provider:
 
 ```bash
 minusbot> /apikey cerebras ...
-minusbot> /providers set cerebras
-minusbot> /models llama3.1-8b
+minusbot> /llm provider cerebras
+minusbot> /llm model llama3.1-8b
 ```
 
 xAI is available as an OpenAI-compatible provider:
 
 ```bash
 minusbot> /apikey x-ai ...
-minusbot> /providers set x-ai
-minusbot> /models grok-3
+minusbot> /llm provider x-ai
+minusbot> /llm model grok-3
 ```
 
 Anthropic is available as a native provider:
 
 ```bash
 minusbot> /apikey anthropic sk-ant-...
-minusbot> /providers set anthropic
-minusbot> /models claude-sonnet-4-20250514
+minusbot> /llm provider anthropic
+minusbot> /llm model claude-sonnet-4-20250514
 ```
 
 ### ⌨️ Available Commands
@@ -115,7 +115,7 @@ Interact with minusbot using slash commands. Type `/help` to see them all:
 | **Config** | `/config show`, `/config get`, `/config set` | Manage public configurations |
 | **Secrets**| `/env list`, `/env set`, `/env get`, `/env unset` | Manage environment variables securely |
 | **Vault**  | `/vault list`, `/vault put`, `/vault delete` | Interact with the encrypted secret vault |
-| **Providers**| `/providers list`, `/providers set-default` | Switch between AI providers |
+| **LLM**| `/llm provider`, `/llm provider <id>`, `/llm model`, `/llm model <id>`, `/llm config <key> <value>` | Switch between AI providers and models |
 | **Skills** | `/skills list`, `/skills load`, `/skills unload` | Manage agent abilities |
 | **Jobs**   | `/jobs list`, `/jobs create`, `/jobs cancel` | Schedule and manage background tasks |
 | **Debug**  | `/tools list`, `/audit tail` | Developer and debugging tools |

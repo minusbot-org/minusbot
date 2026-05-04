@@ -40,10 +40,13 @@ impl Runtime {
         msg: &IncomingMessage,
         channel: Arc<dyn Channel>,
     ) -> Result<String> {
-        let parsed = minus_commands::parse_slash_command(&msg.content);
         let registry = runtime.commands.read().await;
+        let parsed = match registry.parse_invocation(&msg.content) {
+            Ok(parsed) => parsed,
+            Err(err) => return Ok(err.render()),
+        };
 
-        if let Some(cmd) = registry.get(&parsed.name) {
+        if let Some(cmd) = registry.get(&parsed.resolved_name) {
             let (shutdown_tx, _) = tokio::sync::mpsc::channel(1);
             let ctx = CommandContext {
                 chat_id: msg.chat_id.clone(),

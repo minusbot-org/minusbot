@@ -9,3 +9,4 @@ async-trait = { workspace = true }
 minus-api = { path = "../minus-api" }
 anyhow = { workspace = true }
 tracing = { workspace = true }
+futures = { workspace = true }

@@ -1,20 +1,61 @@
+use crate::{ArgSpec, CommandSpec};
 use anyhow::Result;
 use async_trait::async_trait;
-use minus_api::{Command, CommandContext, CommandDefinition};
+use minus_api::{Command, CommandContext};
 
 pub struct SecretCommand;
 
+pub fn spec() -> CommandSpec {
+    CommandSpec::new(
+        "secrets",
+        "/secrets <list|set|approve|deny> <component/key> [value]",
+        "Manage programmatic secret declarations",
+    )
+    .category("security")
+    .strict_subcommands()
+    .handler(|args, ctx| Box::pin(async move { SecretCommand.execute(args, ctx).await }))
+    .subcommand(sub("list", "/secrets list", "List secret declarations"))
+    .subcommand(
+        sub(
+            "set",
+            "/secrets set <component/key> <value>",
+            "Set a secret",
+        )
+        .arg(ArgSpec::required("component/key", "Secret target"))
+        .arg(ArgSpec::required("value", "Secret value")),
+    )
+    .subcommand(
+        sub(
+            "approve",
+            "/secrets approve <component/key>",
+            "Approve a secret declaration",
+        )
+        .arg(ArgSpec::required("component/key", "Secret target")),
+    )
+    .subcommand(
+        sub(
+            "deny",
+            "/secrets deny <component/key>",
+            "Deny a secret declaration",
+        )
+        .arg(ArgSpec::required("component/key", "Secret target")),
+    )
+}
+
+fn sub(name: &'static str, usage: &'static str, about: &'static str) -> CommandSpec {
+    CommandSpec::new(name, usage, about).handler(move |args, ctx| {
+        Box::pin(async move {
+            let mut full = vec![name.to_string()];
+            full.extend(args);
+            SecretCommand.execute(full, ctx).await
+        })
+    })
+}
+
 #[async_trait]
 impl Command for SecretCommand {
-    fn definition(&self) -> CommandDefinition {
-        CommandDefinition {
-            name: "secrets".into(),
-            description: "Manage programmatic secret declarations".into(),
-            aliases: vec![],
-            usage: "/secrets <list|set|approve|deny> <component/key> [value]".into(),
-            category: "security".into(),
-            min_args: 0,
-        }
+    fn spec(&self) -> CommandSpec {
+        spec()
     }
 
     async fn execute(&self, args: Vec<String>, ctx: CommandContext) -> Result<String> {

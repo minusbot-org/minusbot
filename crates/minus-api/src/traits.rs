@@ -3,6 +3,7 @@ use crate::permissions::*;
 use crate::types::*;
 use anyhow::Result;
 use async_trait::async_trait;
+use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -124,8 +125,247 @@ pub trait Tool: Send + Sync {
 
 #[async_trait]
 pub trait Command: Send + Sync {
-    fn definition(&self) -> CommandDefinition;
+    fn spec(&self) -> CommandSpec;
+
+    fn definition(&self) -> CommandDefinition {
+        self.spec().definition()
+    }
+
     async fn execute(&self, args: Vec<String>, ctx: CommandContext) -> Result<String>;
+}
+
+pub type CommandHandler =
+    dyn Fn(Vec<String>, CommandContext) -> BoxFuture<'static, Result<String>> + Send + Sync;
+
+#[derive(Debug, Clone)]
+pub enum ValueType {
+    String,
+    Integer,
+    Float,
+    Boolean,
+}
+
+#[derive(Debug, Clone)]
+pub struct ArgSpec {
+    pub name: String,
+    pub required: bool,
+    pub value_type: ValueType,
+    pub variadic: bool,
+    pub description: String,
+}
+
+impl ArgSpec {
+    pub fn required(name: impl Into<String>, description: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            required: true,
+            value_type: ValueType::String,
+            variadic: false,
+            description: description.into(),
+        }
+    }
+
+    pub fn optional(name: impl Into<String>, description: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            required: false,
+            value_type: ValueType::String,
+            variadic: false,
+            description: description.into(),
+        }
+    }
+
+    pub fn value_type(mut self, value_type: ValueType) -> Self {
+        self.value_type = value_type;
+        self
+    }
+
+    pub fn variadic(mut self) -> Self {
+        self.variadic = true;
+        self
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FlagSpec {
+    pub name: String,
+    pub short: Option<char>,
+    pub takes_value: bool,
+    pub value_type: ValueType,
+    pub description: String,
+}
+
+#[derive(Clone)]
+pub struct CommandSpec {
+    pub name: String,
+    pub aliases: Vec<String>,
+    pub about: String,
+    pub usage: String,
+    pub category: String,
+    pub command_aliases: Vec<String>,
+    pub min_args: usize,
+    pub examples: Vec<String>,
+    pub args: Vec<ArgSpec>,
+    pub flags: Vec<FlagSpec>,
+    pub subcommands: Vec<CommandSpec>,
+    pub allow_unknown_subcommands: bool,
+    pub handler: Option<Arc<CommandHandler>>,
+}
+
+impl CommandSpec {
+    pub fn new(
+        name: impl Into<String>,
+        usage: impl Into<String>,
+        about: impl Into<String>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            aliases: Vec::new(),
+            about: about.into(),
+            usage: usage.into(),
+            category: "general".to_string(),
+            command_aliases: Vec::new(),
+            min_args: 0,
+            examples: Vec::new(),
+            args: Vec::new(),
+            flags: Vec::new(),
+            subcommands: Vec::new(),
+            allow_unknown_subcommands: true,
+            handler: None,
+        }
+    }
+
+    pub fn definition(&self) -> CommandDefinition {
+        CommandDefinition {
+            name: self.name.clone(),
+            description: self.about.clone(),
+            usage: self.usage.clone(),
+            category: self.category.clone(),
+            aliases: self.command_aliases.clone(),
+            min_args: self.min_args,
+        }
+    }
+
+    pub fn category(mut self, category: impl Into<String>) -> Self {
+        self.category = category.into();
+        self
+    }
+
+    pub fn alias(mut self, alias: impl Into<String>) -> Self {
+        self.aliases.push(alias.into());
+        self
+    }
+
+    pub fn command_alias(mut self, alias: impl Into<String>) -> Self {
+        self.command_aliases.push(alias.into());
+        self
+    }
+
+    pub fn min_args(mut self, min_args: usize) -> Self {
+        self.min_args = min_args;
+        self
+    }
+
+    pub fn strict_subcommands(mut self) -> Self {
+        self.allow_unknown_subcommands = false;
+        self
+    }
+
+    pub fn arg(mut self, arg: ArgSpec) -> Self {
+        self.args.push(arg);
+        self
+    }
+
+    pub fn subcommand(mut self, subcommand: CommandSpec) -> Self {
+        self.subcommands.push(subcommand);
+        self
+    }
+
+    pub fn example(mut self, example: impl Into<String>) -> Self {
+        self.examples.push(example.into());
+        self
+    }
+
+    pub fn handler<F>(mut self, handler: F) -> Self
+    where
+        F: Fn(Vec<String>, CommandContext) -> BoxFuture<'static, Result<String>>
+            + Send
+            + Sync
+            + 'static,
+    {
+        self.handler = Some(Arc::new(handler));
+        self
+    }
+
+    pub fn render_help(&self, command_name: &str) -> String {
+        let mut out = format!("Usage: {}\n\n{}", self.usage, self.about);
+
+        if !self.subcommands.is_empty() {
+            out.push_str("\n\nSubcommands:\n");
+            for subcommand in &self.subcommands {
+                out.push_str(&format!("  {:<18} {}\n", subcommand.name, subcommand.about));
+            }
+        }
+
+        if !self.args.is_empty() {
+            out.push_str("\nArguments:\n");
+            for arg in &self.args {
+                let required = if arg.required { "required" } else { "optional" };
+                out.push_str(&format!(
+                    "  {:<18} {} ({})\n",
+                    arg.name, arg.description, required
+                ));
+            }
+        }
+
+        if !self.flags.is_empty() {
+            out.push_str("\nFlags:\n");
+            for flag in &self.flags {
+                let value = if flag.takes_value { " <value>" } else { "" };
+                let short = flag.short.map(|s| format!("-{}, ", s)).unwrap_or_default();
+                out.push_str(&format!(
+                    "  {}--{}{}  {}\n",
+                    short, flag.name, value, flag.description
+                ));
+            }
+        }
+
+        if !self.examples.is_empty() {
+            out.push_str("\nExamples:\n");
+            for example in &self.examples {
+                out.push_str(&format!("  {}\n", example));
+            }
+        }
+
+        if self.subcommands.is_empty() && self.args.is_empty() && self.flags.is_empty() {
+            out.push_str(&format!(
+                "\nRun /help for all commands, or /{} with valid args.",
+                command_name
+            ));
+        }
+
+        out
+    }
+}
+
+impl std::fmt::Debug for CommandSpec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CommandSpec")
+            .field("name", &self.name)
+            .field("about", &self.about)
+            .field("usage", &self.usage)
+            .field("category", &self.category)
+            .field("aliases", &self.aliases)
+            .field("command_aliases", &self.command_aliases)
+            .field("min_args", &self.min_args)
+            .field("examples", &self.examples)
+            .field("args", &self.args)
+            .field("flags", &self.flags)
+            .field("subcommands", &self.subcommands)
+            .field("allow_unknown_subcommands", &self.allow_unknown_subcommands)
+            .field("handler", &self.handler.as_ref().map(|_| "<handler>"))
+            .finish()
+    }
 }
 
 #[async_trait]

@@ -12,3 +12,4 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
+futures = { workspace = true }

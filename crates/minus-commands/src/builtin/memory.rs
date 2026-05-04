@@ -1,20 +1,56 @@
+use crate::{ArgSpec, CommandSpec, ValueType};
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
-use minus_api::{Command, CommandContext, CommandDefinition};
+use minus_api::{Command, CommandContext};
 
 pub struct MemoryCommand;
 
+pub fn spec() -> CommandSpec {
+    CommandSpec::new(
+        "memory",
+        "/memory <list|search|delete|create> [args]",
+        "Manage agent memories",
+    )
+    .category("system")
+    .command_alias("mem")
+    .strict_subcommands()
+    .handler(|args, ctx| Box::pin(async move { MemoryCommand.execute(args, ctx).await }))
+    .subcommand(sub("list", "/memory list", "List memories"))
+    .subcommand(
+        sub("search", "/memory search <term>", "Search memories")
+            .arg(ArgSpec::required("term", "Search term")),
+    )
+    .subcommand(
+        sub("delete", "/memory delete <id>", "Delete a memory")
+            .arg(ArgSpec::required("id", "Memory id")),
+    )
+    .subcommand(
+        sub(
+            "create",
+            "/memory create <id> <brief> [content] [important]",
+            "Create a memory",
+        )
+        .arg(ArgSpec::required("id", "Memory id"))
+        .arg(ArgSpec::required("brief", "Short memory summary"))
+        .arg(ArgSpec::optional("content", "Memory content"))
+        .arg(ArgSpec::optional("important", "true or false").value_type(ValueType::Boolean)),
+    )
+}
+
+fn sub(name: &'static str, usage: &'static str, about: &'static str) -> CommandSpec {
+    CommandSpec::new(name, usage, about).handler(move |args, ctx| {
+        Box::pin(async move {
+            let mut full = vec![name.to_string()];
+            full.extend(args);
+            MemoryCommand.execute(full, ctx).await
+        })
+    })
+}
+
 #[async_trait]
 impl Command for MemoryCommand {
-    fn definition(&self) -> CommandDefinition {
-        CommandDefinition {
-            name: "memory".into(),
-            description: "Manage agent memories.".into(),
-            usage: "/memory <list|search|delete|create> [args]".into(),
-            category: "system".into(),
-            aliases: vec!["mem".into()],
-            min_args: 0,
-        }
+    fn spec(&self) -> CommandSpec {
+        spec()
     }
 
     async fn execute(&self, args: Vec<String>, ctx: CommandContext) -> Result<String> {
