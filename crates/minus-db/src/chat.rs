@@ -85,6 +85,23 @@ impl Database {
         Ok(())
     }
 
+    pub async fn delete_chat(&self, id: &str) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query("DELETE FROM messages WHERE chat_id = ?")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+
+        sqlx::query("DELETE FROM chats WHERE id = ?")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub async fn get_chat(&self, id: &str) -> Result<Option<ChatRecord>> {
         let row = sqlx::query(
             "SELECT id, channel_id, external_id, title, created_at, updated_at FROM chats WHERE id = ?",

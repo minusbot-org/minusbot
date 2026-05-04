@@ -49,7 +49,7 @@ pub trait Channel: Send + Sync {
     }
 
     // Events (Informing channel about state changes)
-    async fn on_chat_switch(&self, _chat_id: &ChatId, _messages: Vec<Message>) -> Result<()> {
+    async fn on_chat_switch(&self, _old_chat_id: &ChatId, _new_chat_id: &ChatId, _messages: Vec<Message>) -> Result<()> {
         Ok(())
     }
 

@@ -93,10 +93,42 @@ impl Runtime {
     /// Register a channel
     pub async fn register_channel(&self, channel: Arc<dyn Channel>) {
         let id = Channel::id(channel.as_ref()).to_string();
+        let name = Channel::name(channel.as_ref()).to_string();
+
         // If channel has a config provider, register that too
         if let Some(config) = channel.config() {
             self.register(config).await;
         }
+
+        if let Some(active_chat) = channel.get_active_chat().await {
+            match self.db.get_chat(&active_chat.0).await {
+                Ok(Some(_)) => {}
+                Ok(None) => {
+                    let title = format!("{} Channel", name);
+                    if let Err(err) = self
+                        .db
+                        .ensure_chat(&active_chat.0, &id, &active_chat.0, Some(&title))
+                        .await
+                    {
+                        tracing::warn!(
+                            channel_id = %id,
+                            chat_id = %active_chat.0,
+                            error = %err,
+                            "Failed to create missing channel chat"
+                        );
+                    }
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        channel_id = %id,
+                        chat_id = %active_chat.0,
+                        error = %err,
+                        "Failed to check channel chat"
+                    );
+                }
+            }
+        }
+
         self.channels.write().await.insert(id, channel);
     }
 

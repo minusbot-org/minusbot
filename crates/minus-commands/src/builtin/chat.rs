@@ -8,7 +8,7 @@ pub struct ChatListCommand;
 pub fn spec() -> CommandSpec {
     CommandSpec::new(
         "chat",
-        "/chat <list|new|switch|rename|read>",
+        "/chat <list|new|switch|rename|delete|read>",
         "Manage chats",
     )
     .category("chat")
@@ -25,8 +25,8 @@ pub fn spec() -> CommandSpec {
         }),
     )
     .subcommand(
-        CommandSpec::new("switch", "/chat switch <id>", "Switch to a chat")
-            .arg(ArgSpec::required("id", "Chat id"))
+        CommandSpec::new("switch", "/chat switch [id]", "Switch to a chat")
+            .arg(ArgSpec::optional("id", "Chat id"))
             .handler(|args, ctx| {
                 Box::pin(async move {
                     let mut full = vec!["switch".to_string()];
@@ -36,8 +36,8 @@ pub fn spec() -> CommandSpec {
             }),
     )
     .subcommand(
-        CommandSpec::new("s", "/chat s <id>", "Switch to a chat")
-            .arg(ArgSpec::required("id", "Chat id"))
+        CommandSpec::new("s", "/chat s [id]", "Switch to a chat")
+            .arg(ArgSpec::optional("id", "Chat id"))
             .handler(|args, ctx| {
                 Box::pin(async move {
                     let mut full = vec!["s".to_string()];
@@ -63,6 +63,18 @@ pub fn spec() -> CommandSpec {
             .handler(|args, ctx| {
                 Box::pin(async move {
                     let mut full = vec!["rename".to_string()];
+                    full.extend(args);
+                    ChatListCommand.execute(full, ctx).await
+                })
+            }),
+    )
+    .subcommand(
+        CommandSpec::new("delete", "/chat delete [id]", "Delete a chat")
+            .alias("rm")
+            .arg(ArgSpec::optional("id", "Chat id"))
+            .handler(|args, ctx| {
+                Box::pin(async move {
+                    let mut full = vec!["delete".to_string()];
                     full.extend(args);
                     ChatListCommand.execute(full, ctx).await
                 })
@@ -116,37 +128,33 @@ impl Command for ChatListCommand {
                 Ok(format!("Chats:\n{}", lines.join("\n")))
             }
             "switch" | "s" => {
-                if args.len() < 2 {
-                    return Ok("Usage: /chat switch <id>".into());
-                }
-                let id = &args[1];
-                let chat = db.get_chat(id).await?;
+                let id = if args.len() < 2 {
+                    match ctx.channel.get_active_chat().await {
+                        Some(chat_id) => chat_id.0,
+                        None => return Ok("Usage: /chat switch <id>".into()),
+                    }
+                } else {
+                    args[1].clone()
+                };
+                let chat = db.get_chat(&id).await?;
                 match chat {
                     Some(c) => {
                         // Fetch message history and notify channel about chat switch
                         let messages = db.get_messages(&c.id, 50).await.unwrap_or_default();
                         ctx.channel
-                            .on_chat_switch(&ChatId(c.id.clone()), messages)
+                            .on_chat_switch(&ctx.chat_id, &ChatId(c.id.clone()), messages)
                             .await?;
 
                         // Attempt to update channel config
-                        let provider_id = format!("channel.{}", ctx.channel_id.0);
-                        if let Some(channel_config) =
-                            ctx.config_registry.get_provider(&provider_id).await
-                        {
-                            if let Err(e) = channel_config.set_config("chat", &c.id).await {
-                                let _ = ctx
-                                    .channel
-                                    .send_notification(NotificationPacket {
-                                        chat_id: ctx.chat_id.clone(),
-                                        severity: NotificationSeverity::Warning,
-                                        content: format!(
-                                            "Failed to save default chat to config: {}",
-                                            e
-                                        ),
-                                    })
-                                    .await;
-                            }
+                        if let Err(e) = ctx.channel.set_active_chat(ChatId(c.id.clone())).await {
+                            let _ = ctx
+                                .channel
+                                .send_notification(NotificationPacket {
+                                    chat_id: ctx.chat_id.clone(),
+                                    severity: NotificationSeverity::Warning,
+                                    content: format!("Failed to save default chat: {}", e),
+                                })
+                                .await;
                         }
 
                         Ok(format!(
@@ -190,6 +198,18 @@ impl Command for ChatListCommand {
                 db.rename_chat(&ctx.chat_id.0, &title).await?;
                 Ok(format!("Chat renamed to: {}", title))
             }
+            "delete" | "rm" => {
+                let target_id = if args.len() > 1 {
+                    &args[1]
+                } else {
+                    &ctx.chat_id.0
+                };
+                if db.get_chat(target_id).await?.is_none() {
+                    return Ok(format!("Chat '{}' not found.", target_id));
+                }
+                db.delete_chat(target_id).await?;
+                Ok(format!("Deleted chat: {}", target_id))
+            }
             "read" => {
                 let limit = if args.len() > 2 {
                     args[2].parse().unwrap_or(10)
@@ -221,6 +241,7 @@ impl ChatListCommand {
         help.push_str("  /chat switch <id>     Switch to a chat\n");
         help.push_str("  /chat new [title]     Create a new chat\n");
         help.push_str("  /chat rename <title>  Rename current chat\n");
+        help.push_str("  /chat delete [id]     Delete a chat\n");
         help.push_str("  /chat read [id] [n]   Read messages from a chat\n");
         help
     }

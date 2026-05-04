@@ -86,9 +86,17 @@ impl Channel for TelegramChannel {
         let mut cache = self.active_chat_id.write().await;
         if cache.is_none() {
             if let Ok(Some(id)) = self.config.read_config("active_chat_id").await {
-                *cache = Some(ChatId(id));
+                if id.is_empty() {
+                    let default_id = format!("chat-{}", minus_api::Channel::id(self));
+                    *cache = Some(ChatId(default_id.clone()));
+                    let _ = self.config.set_config("active_chat_id", &default_id).await;
+                } else {
+                    *cache = Some(ChatId(id));
+                }
             } else {
-                *cache = Some(ChatId(format!("{}-chat", minus_api::Channel::id(self))));
+                let default_id = format!("chat-{}", minus_api::Channel::id(self));
+                *cache = Some(ChatId(default_id.clone()));
+                let _ = self.config.set_config("active_chat_id", &default_id).await;
             }
         }
         cache.clone()

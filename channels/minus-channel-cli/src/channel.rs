@@ -34,6 +34,12 @@ pub enum CliPacket {
         reason: String,
         error: String,
     },
+    Welcome {
+        version: String,
+        chat_id: String,
+        provider: String,
+        model: String,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -70,10 +76,11 @@ impl CliChannel {
     }
 
     async fn handle_stream<S>(
+        &self,
         stream: S,
-        message_tx: mpsc::Sender<IncomingMessage>,
-        active_streams: Arc<Mutex<Vec<(ChatId, mpsc::Sender<String>)>>>,
         expected_secret: Option<String>,
+        provider_display: String,
+        model_display: String,
     ) -> Result<()>
     where
         S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
@@ -82,15 +89,23 @@ impl CliChannel {
         let mut lines = BufReader::new(reader).lines();
 
         let (resp_tx, mut resp_rx) = mpsc::channel::<String>(32);
-        let mut current_chat_id = ChatId("cli:default".into());
+        let mut current_chat_id = self.get_active_chat().await.unwrap_or(ChatId("chat-cli".into()));
 
         // Register this stream initially
         {
-            let mut streams = active_streams.lock().await;
+            let mut streams = self.active_streams.lock().await;
             streams.push((current_chat_id.clone(), resp_tx.clone()));
         }
 
-        let active_streams_inner = active_streams.clone();
+        let welcome = CliPacket::Welcome {
+            version: "0.1.0".to_string(),
+            chat_id: current_chat_id.0.clone(),
+            provider: provider_display,
+            model: model_display,
+        };
+        let _ = writer.write_all(format!("{}\n", serde_json::to_string(&welcome).unwrap()).as_bytes()).await;
+
+        let active_streams_inner = self.active_streams.clone();
 
         // Spawn a task to send responses back to the client
         tokio::spawn(async move {
@@ -136,7 +151,7 @@ impl CliChannel {
                 ChannelId("cli".into()),
                 req.content,
             );
-            if message_tx.send(msg).await.is_err() {
+            if self.message_tx.send(msg).await.is_err() {
                 break;
             }
         }
@@ -192,9 +207,17 @@ impl Channel for CliChannel {
         let mut cache = self.active_chat_id.write().await;
         if cache.is_none() {
             if let Ok(Some(id)) = self.config.read_config("active_chat_id").await {
-                *cache = Some(ChatId(id));
+                if id.is_empty() {
+                    let default_id = format!("chat-{}", minus_api::Channel::id(self));
+                    *cache = Some(ChatId(default_id.clone()));
+                    let _ = self.config.set_config("active_chat_id", &default_id).await;
+                } else {
+                    *cache = Some(ChatId(id));
+                }
             } else {
-                *cache = Some(ChatId(format!("{}-chat", minus_api::Channel::id(self))));
+                let default_id = format!("chat-{}", minus_api::Channel::id(self));
+                *cache = Some(ChatId(default_id.clone()));
+                let _ = self.config.set_config("active_chat_id", &default_id).await;
             }
         }
         cache.clone()
@@ -224,6 +247,34 @@ impl Channel for CliChannel {
         {
             let mut context = self.context.write().await;
             *context = Some(ctx.clone());
+        }
+
+        let mut provider_display = "(none)".to_string();
+        let mut model_display = "(none)".to_string();
+        
+        let config_path = ctx.config_dir.parent().unwrap().join("config.toml");
+        if let Ok(content) = std::fs::read_to_string(&config_path) {
+            if let Ok(val) = toml::from_str::<toml::Value>(&content) {
+                if let Some(p) = val.get("provider").and_then(|v| v.as_table()) {
+                    if let Some(d) = p.get("default").and_then(|v| v.as_str()) {
+                        provider_display = d.to_string();
+                    }
+                    if let Some(m) = p.get("text_model").and_then(|v| v.as_str()) {
+                        model_display = m.to_string();
+                    }
+                }
+            }
+        }
+        
+        if provider_display != "(none)" {
+            let provider_cfg_path = ctx.config_dir.join(format!("provider-{}.toml", provider_display));
+            if let Ok(content) = std::fs::read_to_string(&provider_cfg_path) {
+                if let Ok(val) = toml::from_str::<toml::Value>(&content) {
+                    if let Some(m) = val.get("text_model").and_then(|v| v.as_str()) {
+                        model_display = m.to_string();
+                    }
+                }
+            }
         }
 
         let message_tx = self.message_tx.clone();
@@ -288,11 +339,12 @@ impl Channel for CliChannel {
                         res = listener.accept() => {
                             match res {
                                 Ok((stream, _)) => {
-                                    let tx = message_tx.clone();
-                                    let streams = active_streams.clone();
                                     let s = secret.clone();
+                                    let c = self.clone();
+                                    let p = provider_display.clone();
+                                    let m = model_display.clone();
                                     tokio::spawn(async move {
-                                        if let Err(e) = Self::handle_stream(stream, tx, streams, s).await {
+                                        if let Err(e) = c.handle_stream(stream, s, p, m).await {
                                             tracing::error!(error = %e, "Unix client error");
                                         }
                                     });
@@ -325,11 +377,12 @@ impl Channel for CliChannel {
                         res = listener.accept() => {
                             match res {
                                 Ok((stream, _)) => {
-                                    let tx = message_tx.clone();
-                                    let streams = active_streams.clone();
                                     let s = secret.clone();
+                                    let c = self.clone();
+                                    let p = provider_display.clone();
+                                    let m = model_display.clone();
                                     tokio::spawn(async move {
-                                        if let Err(e) = Self::handle_stream(stream, tx, streams, s).await {
+                                        if let Err(e) = c.handle_stream(stream, s, p, m).await {
                                             tracing::error!(error = %e, "TCP client error");
                                         }
                                     });
@@ -399,12 +452,12 @@ impl Channel for CliChannel {
         Some(Arc::new(self.clone()))
     }
 
-    async fn on_chat_switch(&self, chat_id: &ChatId, messages: Vec<Message>) -> Result<()> {
+    async fn on_chat_switch(&self, old_chat_id: &ChatId, new_chat_id: &ChatId, messages: Vec<Message>) -> Result<()> {
         let packet = CliPacket::ChatHistory {
-            chat_id: chat_id.clone(),
+            chat_id: new_chat_id.clone(),
             messages,
         };
-        self.broadcast(chat_id, packet).await
+        self.broadcast(old_chat_id, packet).await
     }
 }
 

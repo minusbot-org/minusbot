@@ -73,6 +73,18 @@ mod tests {
     }
 
     #[test]
+    fn accepts_chat_rm_alias_without_listing_it_as_subcommand() {
+        let registry = registry();
+        let invocation = registry.parse_invocation("/chat rm chat-1").unwrap();
+        assert_eq!(invocation.subcommand_path, vec!["rm"]);
+        assert_eq!(invocation.positionals, vec!["chat-1"]);
+
+        let help = registry.spec("chat").unwrap().render_help("chat");
+        assert!(help.contains("delete"));
+        assert!(!help.contains("rm"));
+    }
+
+    #[test]
     fn rejects_old_llm_provider_config_shape() {
         let err = registry()
             .parse_invocation("/llm provider test config")

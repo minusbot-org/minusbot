@@ -37,6 +37,12 @@ enum CliPacket {
         reason: String,
         error: String,
     },
+    Welcome {
+        version: String,
+        chat_id: String,
+        provider: String,
+        model: String,
+    },
 }
 
 struct AppState {
@@ -180,98 +186,70 @@ async fn main() -> Result<()> {
     };
 
     let state = Arc::new(Mutex::new(AppState {
-        current_chat_id: "chat-cli".into(),
+        current_chat_id: "".into(),
     }));
 
-    // Print startup banner
-    {
-        let config_raw = minus_env::AppConfig::load(&data_dir.config_path()).unwrap_or_default();
-        let provider_display = config_raw.provider.default.as_deref().unwrap_or("(none)");
+    let mut lines = BufReader::new(reader).lines();
+    if let Ok(Some(line)) = lines.next_line().await {
+        if let Ok(CliPacket::Welcome { version, chat_id, provider, model }) = serde_json::from_str(&line) {
+            let proto_str = match protocol {
+                #[cfg(unix)]
+                Protocol::Unix => "Unix Socket",
+                Protocol::Tcp => "TCP",
+            };
 
-        let mut model_display = config_raw
-            .provider
-            .text_model
-            .clone()
-            .unwrap_or_else(|| "(none)".into());
-        if let Some(id) = &config_raw.provider.default {
-            let provider_cfg_path = data_dir.component_config_path("provider", id);
-            if provider_cfg_path.exists() {
-                if let Ok(content) = std::fs::read_to_string(&provider_cfg_path) {
-                    if let Ok(val) = toml::from_str::<toml::Value>(&content) {
-                        if let Some(m) = val.get("text_model").and_then(|v| v.as_str()) {
-                            model_display = m.to_string();
-                        }
-                    }
-                }
-            }
-        }
-        let version = "0.1.0";
-
-        let proto_str = match protocol {
-            #[cfg(unix)]
-            Protocol::Unix => "Unix Socket",
-            Protocol::Tcp => "TCP",
-        };
-
-        println!();
-        println!("\x1b[36m      ██    ██    \x1b[0m");
-        println!("\x1b[36m      ██    ██    \x1b[0m");
-        println!("\x1b[36m     ██████████   \x1b[0m");
-        println!(
-            "\x1b[36m    ███ ████ ███  \x1b[0m  \x1b[1;35mMinusc v{}\x1b[0m",
-            version
-        );
-        println!("\x1b[36m     ██████████   \x1b[0m  CLI Client for Minusbot");
-        println!("\x1b[36m       ██████     \x1b[0m");
-        println!("\x1b[36m      ███████     \x1b[0m");
-        println!("\x1b[36m       ██  ██     \x1b[0m");
-        println!();
-
-        println!(
-            "  \x1b[36mProtocol\x1b[0m   -> \x1b[32m{}\x1b[0m",
-            proto_str
-        );
-        if protocol == Protocol::Tcp {
-            println!("  \x1b[36mHost\x1b[0m       -> \x1b[32m{}\x1b[0m", host);
-        } else {
-            #[cfg(unix)]
+            println!();
+            println!("\x1b[36m      ██    ██    \x1b[0m");
+            println!("\x1b[36m      ██    ██    \x1b[0m");
+            println!("\x1b[36m     ██████████   \x1b[0m");
             println!(
-                "  \x1b[36mSocket\x1b[0m     -> \x1b[32m{}\x1b[0m",
-                data_dir.root.join("minusd.sock").display()
+                "\x1b[36m    ███ ████ ███  \x1b[0m  \x1b[1;35mMinusc v{}\x1b[0m",
+                version
             );
-        }
-        println!(
-            "  \x1b[36mAuth\x1b[0m       -> \x1b[32m{}\x1b[0m",
-            if secret.is_some() {
-                "Secret key active"
+            println!("\x1b[36m     ██████████   \x1b[0m  CLI Client for Minusbot");
+            println!("\x1b[36m       ██████     \x1b[0m");
+            println!("\x1b[36m      ███████     \x1b[0m");
+            println!("\x1b[36m       ██  ██     \x1b[0m");
+            println!();
+
+            println!("  \x1b[36mProtocol\x1b[0m   -> \x1b[32m{}\x1b[0m", proto_str);
+            if protocol == Protocol::Tcp {
+                println!("  \x1b[36mHost\x1b[0m       -> \x1b[32m{}\x1b[0m", host);
             } else {
-                "None"
+                #[cfg(unix)]
+                println!(
+                    "  \x1b[36mSocket\x1b[0m     -> \x1b[32m{}\x1b[0m",
+                    data_dir.root.join("minusd.sock").display()
+                );
             }
-        );
-        println!(
-            "  \x1b[36mProvider\x1b[0m   -> \x1b[33m{}\x1b[0m",
-            provider_display
-        );
-        println!(
-            "  \x1b[36mModel\x1b[0m      -> \x1b[33m{}\x1b[0m",
-            model_display
-        );
-        println!();
+            println!(
+                "  \x1b[36mAuth\x1b[0m       -> \x1b[32m{}\x1b[0m",
+                if secret.is_some() {
+                    "Secret key active"
+                } else {
+                    "None"
+                }
+            );
+            println!("  \x1b[36mProvider\x1b[0m   -> \x1b[33m{}\x1b[0m", provider);
+            println!("  \x1b[36mModel\x1b[0m      -> \x1b[33m{}\x1b[0m", model);
+            println!();
+
+            {
+                let mut s = state.lock().unwrap();
+                s.current_chat_id = chat_id.clone();
+            }
+
+            let initial_req = CliRequest {
+                chat_id: chat_id.clone(),
+                content: "/chat switch".to_string(),
+                secret: secret.clone(),
+            };
+            let json = serde_json::to_string(&initial_req)?;
+            writer.write_all(format!("{}\n", json).as_bytes()).await?;
+        }
     }
 
     let state_clone = state.clone();
-
-    // Request initial chat history
-    {
-        let s = state.lock().unwrap();
-        let initial_req = CliRequest {
-            chat_id: s.current_chat_id.clone(),
-            content: format!("/chat switch {}", s.current_chat_id),
-            secret: secret.clone(),
-        };
-        let json = serde_json::to_string(&initial_req)?;
-        writer.write_all(format!("{}\n", json).as_bytes()).await?;
-    }
 
     let config = rustyline::Config::builder()
         .edit_mode(rustyline::EditMode::Emacs)
@@ -283,7 +261,7 @@ async fn main() -> Result<()> {
     // Task to read from server and print to stdout
     tokio::spawn(async move {
         let mut printer = printer;
-        let mut lines = BufReader::new(reader).lines();
+        // Use the remaining lines
         while let Ok(Some(line)) = lines.next_line().await {
             let packet: CliPacket = match serde_json::from_str(&line) {
                 Ok(p) => p,
@@ -348,6 +326,7 @@ async fn main() -> Result<()> {
                     let _ = printer.print(msg);
                     std::process::exit(0);
                 }
+                CliPacket::Welcome { .. } => {}
             }
         }
     });

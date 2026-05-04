@@ -176,7 +176,11 @@ impl TextProvider for MistralAiProvider {
             .choices
             .first()
             .context("No choices in Mistral response")?;
-        let content = choice.message.content.clone();
+        let content = choice
+            .message
+            .content
+            .as_ref()
+            .and_then(MistralContent::text);
 
         let tool_calls = choice
             .message
@@ -187,18 +191,24 @@ impl TextProvider for MistralAiProvider {
                     .map(|tc| ToolCall {
                         id: tc.id.clone(),
                         name: tc.function.name.clone(),
-                        arguments: serde_json::from_str(&tc.function.arguments)
-                            .unwrap_or(serde_json::Value::Object(Default::default())),
+                        arguments: tc.function.arguments.as_json(),
                         metadata: None,
                     })
                     .collect()
             })
             .unwrap_or_default();
 
-        let usage = api_resp.usage.map(|u| ProviderUsage {
-            prompt_tokens: u.prompt_tokens,
-            completion_tokens: u.completion_tokens,
-            total_tokens: u.total_tokens,
+        let usage = api_resp.usage.map(|u| {
+            let prompt_tokens = u.prompt_tokens.unwrap_or_default();
+            let completion_tokens = u.completion_tokens.unwrap_or_default();
+            let total_tokens = u
+                .total_tokens
+                .unwrap_or(prompt_tokens.saturating_add(completion_tokens));
+            ProviderUsage {
+                prompt_tokens,
+                completion_tokens,
+                total_tokens,
+            }
         });
 
         Ok(ProviderResponse {
@@ -312,12 +322,80 @@ struct ApiResponse {
 
 #[derive(Debug, Deserialize)]
 struct ApiChoice {
-    message: ApiMessage,
+    message: ApiResponseMessage,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApiResponseMessage {
+    content: Option<MistralContent>,
+    tool_calls: Option<Vec<ApiResponseToolCall>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum MistralContent {
+    Text(String),
+    Parts(Vec<MistralContentPart>),
+}
+
+impl MistralContent {
+    fn text(&self) -> Option<String> {
+        match self {
+            MistralContent::Text(text) => Some(text.clone()),
+            MistralContent::Parts(parts) => {
+                let text = parts
+                    .iter()
+                    .filter_map(|part| part.text.as_deref())
+                    .collect::<Vec<_>>()
+                    .join("");
+                if text.is_empty() {
+                    None
+                } else {
+                    Some(text)
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct MistralContentPart {
+    text: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApiResponseToolCall {
+    id: String,
+    function: ApiResponseFunctionCall,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApiResponseFunctionCall {
+    name: String,
+    arguments: MistralArguments,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum MistralArguments {
+    String(String),
+    Json(serde_json::Value),
+}
+
+impl MistralArguments {
+    fn as_json(&self) -> serde_json::Value {
+        match self {
+            MistralArguments::String(value) => {
+                serde_json::from_str(value).unwrap_or(serde_json::Value::Object(Default::default()))
+            }
+            MistralArguments::Json(value) => value.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
 struct ApiUsage {
-    prompt_tokens: u32,
-    completion_tokens: u32,
-    total_tokens: u32,
+    prompt_tokens: Option<u32>,
+    completion_tokens: Option<u32>,
+    total_tokens: Option<u32>,
 }
