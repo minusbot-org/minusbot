@@ -22,6 +22,9 @@ members = [
     "providers/minus-provider-groq",
     "providers/minus-provider-deepseek",
     "providers/minus-provider-together-ai",
+    "providers/minus-provider-baseten",
+    "providers/minus-provider-cerebras",
+    "providers/minus-provider-x-ai",
     "providers/minus-provider-google",
     "providers/minus-provider-mistral",
 ]

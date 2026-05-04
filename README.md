@@ -74,6 +74,30 @@ minusbot> /providers set together-ai
 minusbot> /models meta-llama/Llama-3.3-70B-Instruct-Turbo
 ```
 
+Baseten is available as an OpenAI-compatible provider:
+
+```bash
+minusbot> /apikey baseten ...
+minusbot> /providers set baseten
+minusbot> /models <model-id>
+```
+
+Cerebras is available as an OpenAI-compatible provider:
+
+```bash
+minusbot> /apikey cerebras ...
+minusbot> /providers set cerebras
+minusbot> /models llama3.1-8b
+```
+
+xAI is available as an OpenAI-compatible provider:
+
+```bash
+minusbot> /apikey x-ai ...
+minusbot> /providers set x-ai
+minusbot> /models grok-3
+```
+
 ### ⌨️ Available Commands
 
 Interact with minusbot using slash commands. Type `/help` to see them all:
@@ -123,6 +147,9 @@ minusbot is built as a highly modular monorepo. The core does not depend on conc
 - **`minus-provider-groq`** → Integration for Groq's OpenAI-compatible APIs.
 - **`minus-provider-deepseek`** → Integration for DeepSeek's OpenAI-compatible APIs.
 - **`minus-provider-together-ai`** → Integration for Together AI's OpenAI-compatible APIs.
+- **`minus-provider-baseten`** → Integration for Baseten's OpenAI-compatible APIs.
+- **`minus-provider-cerebras`** → Integration for Cerebras' OpenAI-compatible APIs.
+- **`minus-provider-x-ai`** → Integration for xAI's OpenAI-compatible APIs.
 
 ### 💬 Channels (`channels/`)
 - **`minus-channel-unix`** → Unix domain sockets / CLI channel implementations.

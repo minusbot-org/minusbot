@@ -1723,6 +1723,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "minus-provider-baseten"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "minus-api",
+ "minus-provider-openai",
+ "reqwest 0.11.27",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
+name = "minus-provider-cerebras"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "minus-api",
+ "minus-provider-openai",
+ "reqwest 0.11.27",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "minus-provider-deepseek"
 version = "0.1.0"
 dependencies = [
@@ -1809,6 +1837,20 @@ dependencies = [
 
 [[package]]
 name = "minus-provider-together-ai"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "minus-api",
+ "minus-provider-openai",
+ "reqwest 0.11.27",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
+name = "minus-provider-x-ai"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -1949,6 +1991,8 @@ dependencies = [
  "minus-db",
  "minus-env",
  "minus-policy",
+ "minus-provider-baseten",
+ "minus-provider-cerebras",
  "minus-provider-deepseek",
  "minus-provider-google",
  "minus-provider-groq",
@@ -1956,6 +2000,7 @@ dependencies = [
  "minus-provider-openai",
  "minus-provider-openrouter",
  "minus-provider-together-ai",
+ "minus-provider-x-ai",
  "minus-providers",
  "minus-runtime",
  "minus-scheduler",

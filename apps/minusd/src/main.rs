@@ -7,11 +7,14 @@ use minus_channel_telegram::TelegramChannel;
 use minus_db::Database;
 use minus_env::{AppConfig, DataDir, SecretsManager};
 use minus_policy::PolicyEngine;
+use minus_provider_baseten::BasetenProvider;
+use minus_provider_cerebras::CerebrasProvider;
 use minus_provider_deepseek::DeepSeekProvider;
 use minus_provider_groq::GroqProvider;
 use minus_provider_openai::OpenAiProvider;
 use minus_provider_openrouter::OpenRouterProvider;
 use minus_provider_together_ai::TogetherAiProvider;
+use minus_provider_x_ai::XAiProvider;
 use minus_providers::ProviderRegistry;
 use minus_runtime::Runtime;
 use minus_scheduler::Scheduler;
@@ -156,6 +159,33 @@ async fn main() -> Result<()> {
             together_ai_key,
             together_ai_base,
             Some(together_ai_cfg),
+        )));
+
+        let baseten_key = sec.get("PROVIDER_BASETEN_API_KEY").map(|s| s.to_string());
+        let baseten_base = sec.get("PROVIDER_BASETEN_ENDPOINT").map(|s| s.to_string());
+        let baseten_cfg = data_dir.component_config_path("provider", "baseten");
+        provider_reg.register(Arc::new(BasetenProvider::new(
+            baseten_key,
+            baseten_base,
+            Some(baseten_cfg),
+        )));
+
+        let cerebras_key = sec.get("PROVIDER_CEREBRAS_API_KEY").map(|s| s.to_string());
+        let cerebras_base = sec.get("PROVIDER_CEREBRAS_ENDPOINT").map(|s| s.to_string());
+        let cerebras_cfg = data_dir.component_config_path("provider", "cerebras");
+        provider_reg.register(Arc::new(CerebrasProvider::new(
+            cerebras_key,
+            cerebras_base,
+            Some(cerebras_cfg),
+        )));
+
+        let x_ai_key = sec.get("PROVIDER_X_AI_API_KEY").map(|s| s.to_string());
+        let x_ai_base = sec.get("PROVIDER_X_AI_ENDPOINT").map(|s| s.to_string());
+        let x_ai_cfg = data_dir.component_config_path("provider", "x-ai");
+        provider_reg.register(Arc::new(XAiProvider::new(
+            x_ai_key,
+            x_ai_base,
+            Some(x_ai_cfg),
         )));
 
         let custom_openai_key = sec
