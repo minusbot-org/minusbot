@@ -25,6 +25,7 @@ members = [
     "providers/minus-provider-baseten",
     "providers/minus-provider-cerebras",
     "providers/minus-provider-x-ai",
+    "providers/minus-provider-anthropic",
     "providers/minus-provider-google",
     "providers/minus-provider-mistral",
 ]

@@ -7,6 +7,7 @@ use minus_channel_telegram::TelegramChannel;
 use minus_db::Database;
 use minus_env::{AppConfig, DataDir, SecretsManager};
 use minus_policy::PolicyEngine;
+use minus_provider_anthropic::AnthropicProvider;
 use minus_provider_baseten::BasetenProvider;
 use minus_provider_cerebras::CerebrasProvider;
 use minus_provider_deepseek::DeepSeekProvider;
@@ -186,6 +187,17 @@ async fn main() -> Result<()> {
             x_ai_key,
             x_ai_base,
             Some(x_ai_cfg),
+        )));
+
+        let anthropic_key = sec.get("PROVIDER_ANTHROPIC_API_KEY").map(|s| s.to_string());
+        let anthropic_base = sec
+            .get("PROVIDER_ANTHROPIC_ENDPOINT")
+            .map(|s| s.to_string());
+        let anthropic_cfg = data_dir.component_config_path("provider", "anthropic");
+        provider_reg.register(Arc::new(AnthropicProvider::new(
+            anthropic_key,
+            anthropic_base,
+            Some(anthropic_cfg),
         )));
 
         let custom_openai_key = sec

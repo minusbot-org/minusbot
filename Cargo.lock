@@ -1723,6 +1723,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "minus-provider-anthropic"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "minus-api",
+ "reqwest 0.11.27",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "minus-provider-baseten"
 version = "0.1.0"
 dependencies = [
@@ -1991,6 +2004,7 @@ dependencies = [
  "minus-db",
  "minus-env",
  "minus-policy",
+ "minus-provider-anthropic",
  "minus-provider-baseten",
  "minus-provider-cerebras",
  "minus-provider-deepseek",

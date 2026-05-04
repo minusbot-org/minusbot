@@ -26,6 +26,7 @@ minus-provider-together-ai = { path = "../../providers/minus-provider-together-a
 minus-provider-baseten = { path = "../../providers/minus-provider-baseten" }
 minus-provider-cerebras = { path = "../../providers/minus-provider-cerebras" }
 minus-provider-x-ai = { path = "../../providers/minus-provider-x-ai" }
+minus-provider-anthropic = { path = "../../providers/minus-provider-anthropic" }
 minus-provider-google = { path = "../../providers/minus-provider-google" }
 minus-provider-mistral = { path = "../../providers/minus-provider-mistral" }
 minus-channel-cli = { path = "../../channels/minus-channel-cli" }

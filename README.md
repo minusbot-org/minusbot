@@ -98,6 +98,14 @@ minusbot> /providers set x-ai
 minusbot> /models grok-3
 ```
 
+Anthropic is available as a native provider:
+
+```bash
+minusbot> /apikey anthropic sk-ant-...
+minusbot> /providers set anthropic
+minusbot> /models claude-sonnet-4-20250514
+```
+
 ### ⌨️ Available Commands
 
 Interact with minusbot using slash commands. Type `/help` to see them all:
@@ -150,6 +158,7 @@ minusbot is built as a highly modular monorepo. The core does not depend on conc
 - **`minus-provider-baseten`** → Integration for Baseten's OpenAI-compatible APIs.
 - **`minus-provider-cerebras`** → Integration for Cerebras' OpenAI-compatible APIs.
 - **`minus-provider-x-ai`** → Integration for xAI's OpenAI-compatible APIs.
+- **`minus-provider-anthropic`** → Native integration for Anthropic's Messages API.
 
 ### 💬 Channels (`channels/`)
 - **`minus-channel-unix`** → Unix domain sockets / CLI channel implementations.
