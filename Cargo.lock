@@ -1738,6 +1738,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "minus-provider-groq"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "minus-api",
+ "minus-provider-openai",
+ "reqwest 0.11.27",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "minus-provider-mistral"
 version = "0.1.0"
 dependencies = [
@@ -1908,6 +1922,7 @@ dependencies = [
  "minus-env",
  "minus-policy",
  "minus-provider-google",
+ "minus-provider-groq",
  "minus-provider-mistral",
  "minus-provider-openai",
  "minus-provider-openrouter",

@@ -50,6 +50,14 @@ minusbot> /providers set-default openrouter
 minusbot> /config set provider.model openai/gpt-4o-mini
 ```
 
+Groq is available as an OpenAI-compatible provider:
+
+```bash
+minusbot> /apikey groq gsk_...
+minusbot> /providers set groq
+minusbot> /models llama-3.1-8b-instant
+```
+
 ### ⌨️ Available Commands
 
 Interact with minusbot using slash commands. Type `/help` to see them all:
@@ -96,6 +104,7 @@ minusbot is built as a highly modular monorepo. The core does not depend on conc
 ### 🔌 Providers (`providers/`)
 - **`minus-provider-openai`** → Integration for OpenAI APIs.
 - **`minus-provider-openrouter`** → Integration for OpenRouter APIs.
+- **`minus-provider-groq`** → Integration for Groq's OpenAI-compatible APIs.
 
 ### 💬 Channels (`channels/`)
 - **`minus-channel-unix`** → Unix domain sockets / CLI channel implementations.

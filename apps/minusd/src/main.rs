@@ -7,6 +7,7 @@ use minus_channel_telegram::TelegramChannel;
 use minus_db::Database;
 use minus_env::{AppConfig, DataDir, SecretsManager};
 use minus_policy::PolicyEngine;
+use minus_provider_groq::GroqProvider;
 use minus_provider_openai::OpenAiProvider;
 use minus_provider_openrouter::OpenRouterProvider;
 use minus_providers::ProviderRegistry;
@@ -122,6 +123,15 @@ async fn main() -> Result<()> {
             openrouter_key,
             openrouter_base,
             Some(openrouter_cfg),
+        )));
+
+        let groq_key = sec.get("PROVIDER_GROQ_API_KEY").map(|s| s.to_string());
+        let groq_base = sec.get("PROVIDER_GROQ_ENDPOINT").map(|s| s.to_string());
+        let groq_cfg = data_dir.component_config_path("provider", "groq");
+        provider_reg.register(Arc::new(GroqProvider::new(
+            groq_key,
+            groq_base,
+            Some(groq_cfg),
         )));
 
         let custom_openai_key = sec
