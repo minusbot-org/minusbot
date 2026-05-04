@@ -111,6 +111,11 @@ async fn main() -> Result<()> {
         let openrouter_base = sec.get("PROVIDER_OPENROUTER_ENDPOINT").map(|s| s.to_string());
         let openrouter_cfg = data_dir.component_config_path("provider", "openrouter");
         provider_reg.register(Arc::new(OpenRouterProvider::new(openrouter_key, openrouter_base, Some(openrouter_cfg))));
+
+        let custom_openai_key = sec.get("PROVIDER_CUSTOM_OPENAI_API_KEY").map(|s| s.to_string());
+        let custom_openai_base = sec.get("PROVIDER_CUSTOM_OPENAI_ENDPOINT").map(|s| s.to_string());
+        let custom_openai_cfg = data_dir.component_config_path("provider", "custom_openai");
+        provider_reg.register(Arc::new(minus_provider_openai::CustomOpenAiProvider::new(custom_openai_key, custom_openai_base, Some(custom_openai_cfg))));
     }
 
     {

@@ -288,6 +288,9 @@ impl MinusProviders for Runtime {
         let key_name = format!("PROVIDER_{}_API_KEY", provider_id.to_uppercase());
         self.resolve_secret_value(&key_name).await
     }
+    async fn get_provider(&self, id: &str) -> Result<Option<Arc<dyn Provider>>> {
+        Ok(self.providers.read().await.get(id))
+    }
 }
 
 // =============================================================================

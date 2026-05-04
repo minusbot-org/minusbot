@@ -140,4 +140,7 @@ impl minus_api::traits::MinusProviders for ProviderRegistry {
         // The registry doesn't have vault access — the Runtime's impl handles this.
         Ok(None)
     }
+    async fn get_provider(&self, id: &str) -> Result<Option<Arc<dyn Provider>>> {
+        Ok(self.get(id))
+    }
 }

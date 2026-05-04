@@ -240,8 +240,8 @@ pub trait MinusProviders: Send + Sync {
     async fn get_default_provider_id(&self) -> Result<String>;
     async fn get_default_text_model(&self) -> Result<String>;
     async fn set_default_text_model(&self, model: &str) -> Result<()>;
-    /// Resolve the API key for a provider, checking vault then env.
     async fn resolve_api_key(&self, provider_id: &str) -> Result<Option<String>>;
+    async fn get_provider(&self, id: &str) -> Result<Option<Arc<dyn Provider>>>;
 }
 
 /// Policy evaluation trait.

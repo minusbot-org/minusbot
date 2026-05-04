@@ -273,10 +273,34 @@ impl Agent {
                 .unwrap_or_default()
         };
 
+        let endpoint = if let Some(p) = providers.default_provider() {
+            if let Some(cp) = p.config() {
+                cp.read_config("endpoint").await.ok().flatten()
+            } else {
+                None
+            }
+        } else {
+            None
+        }.or_else(|| {
+            let endpoint_key = format!("PROVIDER_{}_ENDPOINT", provider_id.to_uppercase());
+             if let Some(vault) = &self.vault {
+                match vault.get_secret(&endpoint_key) {
+                    Ok(bytes) => Some(String::from_utf8_lossy(&bytes).to_string()),
+                    Err(_) => {
+                        let sec = self.secrets.try_read().ok()?;
+                        sec.get(&endpoint_key).map(|s| s.to_string())
+                    }
+                }
+            } else {
+                let sec = self.secrets.try_read().ok()?;
+                sec.get(&endpoint_key).map(|s| s.to_string())
+            }
+        });
+
         let options = TextInferenceOptions {
             api_key,
             model,
-            endpoint: None, // Could be fetched from config later
+            endpoint,
             temperature: prov_cfg.temperature.unwrap_or(0.7),
             max_tokens: prov_cfg.max_tokens,
             top_p: prov_cfg.top_p.unwrap_or(1.0),
