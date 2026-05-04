@@ -199,6 +199,7 @@ impl TextProvider for CustomOpenAiProvider {
                         name: tc.function.name.clone(),
                         arguments: serde_json::from_str(&tc.function.arguments)
                             .unwrap_or(serde_json::Value::Object(Default::default())),
+                        metadata: None,
                     })
                     .collect()
             })

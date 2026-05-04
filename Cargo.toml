@@ -19,6 +19,7 @@ members = [
     "channels/minus-channel-telegram",
     "providers/minus-provider-openai",
     "providers/minus-provider-openrouter",
+    "providers/minus-provider-google",
 ]
 
 [workspace.dependencies]

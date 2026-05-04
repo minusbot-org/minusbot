@@ -1441,6 +1441,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "minus-provider-google"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "minus-api",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "minus-provider-openai"
 version = "0.1.0"
 dependencies = [
@@ -1595,6 +1610,7 @@ dependencies = [
  "minus-db",
  "minus-env",
  "minus-policy",
+ "minus-provider-google",
  "minus-provider-openai",
  "minus-provider-openrouter",
  "minus-providers",
