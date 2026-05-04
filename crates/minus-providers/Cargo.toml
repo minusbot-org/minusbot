@@ -5,6 +5,8 @@ edition = "2021"
 
 [dependencies]
 minus-api = { path = "../minus-api" }
+minus-provider-openrouter = { path = "../../providers/minus-provider-openrouter" }
+minus-provider-nvidia = { path = "../../providers/minus-provider-nvidia" }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }

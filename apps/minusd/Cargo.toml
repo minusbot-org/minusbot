@@ -20,6 +20,7 @@ minus-tools = { path = "../../crates/minus-tools" }
 minus-providers = { path = "../../crates/minus-providers" }
 minus-provider-openai = { path = "../../providers/minus-provider-openai" }
 minus-provider-openrouter = { path = "../../providers/minus-provider-openrouter" }
+minus-provider-nvidia = { path = "../../providers/minus-provider-nvidia" }
 minus-provider-groq = { path = "../../providers/minus-provider-groq" }
 minus-provider-deepseek = { path = "../../providers/minus-provider-deepseek" }
 minus-provider-together-ai = { path = "../../providers/minus-provider-together-ai" }

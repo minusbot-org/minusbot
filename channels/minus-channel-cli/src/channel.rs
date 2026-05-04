@@ -277,9 +277,6 @@ impl Channel for CliChannel {
             }
         }
 
-        let message_tx = self.message_tx.clone();
-        let active_streams = self.active_streams.clone();
-
         let is_windows = cfg!(target_os = "windows");
 
         let (protocol, secret): (CliProtocol, Option<String>) = if is_windows {

@@ -14,6 +14,7 @@ use minus_provider_deepseek::DeepSeekProvider;
 use minus_provider_groq::GroqProvider;
 use minus_provider_openai::OpenAiProvider;
 use minus_provider_openrouter::OpenRouterProvider;
+use minus_provider_nvidia::NvidiaProvider;
 use minus_provider_together_ai::TogetherAiProvider;
 use minus_provider_x_ai::XAiProvider;
 use minus_providers::ProviderRegistry;
@@ -129,6 +130,19 @@ async fn main() -> Result<()> {
             openrouter_key,
             openrouter_base,
             Some(openrouter_cfg),
+        )));
+
+        let nvidia_key = sec
+            .get("PROVIDER_NVIDIA_API_KEY")
+            .map(|s| s.to_string());
+        let nvidia_base = sec
+            .get("PROVIDER_NVIDIA_ENDPOINT")
+            .map(|s| s.to_string());
+        let nvidia_cfg = data_dir.component_config_path("provider", "nvidia");
+        provider_reg.register(Arc::new(NvidiaProvider::new(
+            nvidia_key,
+            nvidia_base,
+            Some(nvidia_cfg),
         )));
 
         let groq_key = sec.get("PROVIDER_GROQ_API_KEY").map(|s| s.to_string());
