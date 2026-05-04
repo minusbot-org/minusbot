@@ -7,6 +7,7 @@ use minus_channel_telegram::TelegramChannel;
 use minus_db::Database;
 use minus_env::{AppConfig, DataDir, SecretsManager};
 use minus_policy::PolicyEngine;
+use minus_provider_deepseek::DeepSeekProvider;
 use minus_provider_groq::GroqProvider;
 use minus_provider_openai::OpenAiProvider;
 use minus_provider_openrouter::OpenRouterProvider;
@@ -132,6 +133,15 @@ async fn main() -> Result<()> {
             groq_key,
             groq_base,
             Some(groq_cfg),
+        )));
+
+        let deepseek_key = sec.get("PROVIDER_DEEPSEEK_API_KEY").map(|s| s.to_string());
+        let deepseek_base = sec.get("PROVIDER_DEEPSEEK_ENDPOINT").map(|s| s.to_string());
+        let deepseek_cfg = data_dir.component_config_path("provider", "deepseek");
+        provider_reg.register(Arc::new(DeepSeekProvider::new(
+            deepseek_key,
+            deepseek_base,
+            Some(deepseek_cfg),
         )));
 
         let custom_openai_key = sec

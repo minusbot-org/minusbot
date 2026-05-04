@@ -58,6 +58,14 @@ minusbot> /providers set groq
 minusbot> /models llama-3.1-8b-instant
 ```
 
+DeepSeek is available as an OpenAI-compatible provider:
+
+```bash
+minusbot> /apikey deepseek sk-...
+minusbot> /providers set deepseek
+minusbot> /models deepseek-chat
+```
+
 ### ⌨️ Available Commands
 
 Interact with minusbot using slash commands. Type `/help` to see them all:
@@ -105,6 +113,7 @@ minusbot is built as a highly modular monorepo. The core does not depend on conc
 - **`minus-provider-openai`** → Integration for OpenAI APIs.
 - **`minus-provider-openrouter`** → Integration for OpenRouter APIs.
 - **`minus-provider-groq`** → Integration for Groq's OpenAI-compatible APIs.
+- **`minus-provider-deepseek`** → Integration for DeepSeek's OpenAI-compatible APIs.
 
 ### 💬 Channels (`channels/`)
 - **`minus-channel-unix`** → Unix domain sockets / CLI channel implementations.
