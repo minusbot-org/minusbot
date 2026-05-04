@@ -101,12 +101,11 @@ impl Database {
     }
 
     pub async fn unload_skill_for_chat(&self, chat_id: &str, skill_id: &str) -> Result<bool> {
-        let result =
-            sqlx::query("DELETE FROM loaded_skills WHERE chat_id = ? AND skill_id = ?")
-                .bind(chat_id)
-                .bind(skill_id)
-                .execute(&self.pool)
-                .await?;
+        let result = sqlx::query("DELETE FROM loaded_skills WHERE chat_id = ? AND skill_id = ?")
+            .bind(chat_id)
+            .bind(skill_id)
+            .execute(&self.pool)
+            .await?;
         Ok(result.rows_affected() > 0)
     }
 

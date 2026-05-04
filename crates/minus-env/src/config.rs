@@ -149,13 +149,27 @@ pub struct PathsConfig {
     pub database: String,
 }
 
-fn default_skills() -> String { "skills".into() }
-fn default_drive() -> String { "drive".into() }
-fn default_logs() -> String { "logs".into() }
-fn default_addons() -> String { "addons".into() }
-fn default_vault() -> String { "vault".into() }
-fn default_cache() -> String { "cache".into() }
-fn default_database() -> String { "data.sqlite".into() }
+fn default_skills() -> String {
+    "skills".into()
+}
+fn default_drive() -> String {
+    "drive".into()
+}
+fn default_logs() -> String {
+    "logs".into()
+}
+fn default_addons() -> String {
+    "addons".into()
+}
+fn default_vault() -> String {
+    "vault".into()
+}
+fn default_cache() -> String {
+    "cache".into()
+}
+fn default_database() -> String {
+    "data.sqlite".into()
+}
 
 impl Default for PathsConfig {
     fn default() -> Self {
@@ -198,8 +212,7 @@ impl AppConfig {
 
     /// Save config to a TOML file.
     pub fn save(&self, path: &Path) -> Result<()> {
-        let content = toml::to_string_pretty(self)
-            .context("Failed to serialize config")?;
+        let content = toml::to_string_pretty(self).context("Failed to serialize config")?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -226,8 +239,8 @@ impl AppConfig {
 
     /// Set a config value by dotted path. Returns true if the value was set.
     pub fn set(&mut self, path: &str, value: &str) -> Result<bool> {
-        let mut toml_val = toml::Value::try_from(&*self)
-            .context("Failed to serialize config to TOML value")?;
+        let mut toml_val =
+            toml::Value::try_from(&*self).context("Failed to serialize config to TOML value")?;
 
         let parts: Vec<&str> = path.split('.').collect();
         if parts.is_empty() {
@@ -246,9 +259,7 @@ impl AppConfig {
             // Preserve the existing type
             let new_val = match existing {
                 toml::Value::Boolean(_) => toml::Value::Boolean(value.parse().unwrap_or(false)),
-                toml::Value::Integer(_) => {
-                    toml::Value::Integer(value.parse().unwrap_or(0))
-                }
+                toml::Value::Integer(_) => toml::Value::Integer(value.parse().unwrap_or(0)),
                 _ => toml::Value::String(value.to_string()),
             };
             current[last] = new_val;
@@ -257,7 +268,8 @@ impl AppConfig {
         }
 
         // Deserialize back
-        let updated: AppConfig = toml_val.try_into()
+        let updated: AppConfig = toml_val
+            .try_into()
             .context("Failed to deserialize updated config")?;
         *self = updated;
         Ok(true)

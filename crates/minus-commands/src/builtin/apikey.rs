@@ -1,6 +1,6 @@
-use minus_api::{Command, CommandContext, CommandDefinition};
 use anyhow::Result;
 use async_trait::async_trait;
+use minus_api::{Command, CommandContext, CommandDefinition};
 
 pub struct ApikeyCommand;
 
@@ -23,12 +23,15 @@ impl Command for ApikeyCommand {
         }
         let provider = args[0].to_lowercase();
         let key_value = &args[1];
-        
+
         let secret_key = format!("PROVIDER_{}_API_KEY", provider.to_uppercase());
-        
+
         let store = ctx.secrets.get_store("").await?;
         store.put_secret(&secret_key, key_value.as_bytes()).await?;
-        
-        Ok(format!("Successfully set API key for provider: {}", provider))
+
+        Ok(format!(
+            "Successfully set API key for provider: {}",
+            provider
+        ))
     }
 }

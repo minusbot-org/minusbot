@@ -2,7 +2,6 @@ use anyhow::Result;
 use async_trait::async_trait;
 use minus_api::{Command, CommandContext, CommandDefinition};
 
-
 pub struct ToolsCommand;
 
 #[async_trait]

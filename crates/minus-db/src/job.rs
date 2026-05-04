@@ -82,11 +82,12 @@ impl Database {
     }
 
     pub async fn cancel_job(&self, id: &str) -> Result<bool> {
-        let result = sqlx::query("UPDATE jobs SET enabled = 0, updated_at = ? WHERE id = ? AND enabled = 1")
-            .bind(Utc::now().to_rfc3339())
-            .bind(id)
-            .execute(&self.pool)
-            .await?;
+        let result =
+            sqlx::query("UPDATE jobs SET enabled = 0, updated_at = ? WHERE id = ? AND enabled = 1")
+                .bind(Utc::now().to_rfc3339())
+                .bind(id)
+                .execute(&self.pool)
+                .await?;
         Ok(result.rows_affected() > 0)
     }
 

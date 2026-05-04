@@ -30,10 +30,14 @@ impl Tool for MemoryWriteTool {
     async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
         let id = call.arguments["id"].as_str().context("Missing id")?;
         let brief = call.arguments["brief"].as_str().context("Missing brief")?;
-        let content = call.arguments["content"].as_str().context("Missing content")?;
+        let content = call.arguments["content"]
+            .as_str()
+            .context("Missing content")?;
         let is_important = call.arguments["is_important"].as_bool().unwrap_or(false);
 
-        ctx.db.save_memory(id, "long", brief, Some(content), is_important).await?;
+        ctx.db
+            .save_memory(id, "long", brief, Some(content), is_important)
+            .await?;
 
         Ok(ToolResult {
             tool_call_id: call.id,
@@ -68,8 +72,14 @@ impl Tool for MemoryReadTool {
         let content = if memories.is_empty() {
             "No memories stored.".into()
         } else {
-            let lines: Vec<String> = memories.iter()
-                .map(|m| format!("[{}] Brief: {} | Important: {}", m.id, m.brief, m.is_important))
+            let lines: Vec<String> = memories
+                .iter()
+                .map(|m| {
+                    format!(
+                        "[{}] Brief: {} | Important: {}",
+                        m.id, m.brief, m.is_important
+                    )
+                })
                 .collect();
             lines.join("\n")
         };
@@ -95,8 +105,8 @@ impl Tool for MemorySearchTool {
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "terms": { 
-                        "type": "array", 
+                    "terms": {
+                        "type": "array",
                         "items": { "type": "string" },
                         "description": "Keywords to search for"
                     }
@@ -111,25 +121,41 @@ impl Tool for MemorySearchTool {
     async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
         // Use list_memories as a fallback search (the MinusDatabase trait doesn't
         // have search_memories — that's on the concrete DB). Filter client-side.
-        let terms: Vec<String> = call.arguments["terms"].as_array()
+        let terms: Vec<String> = call.arguments["terms"]
+            .as_array()
             .context("Missing terms")?
             .iter()
             .filter_map(|v| v.as_str().map(|s| s.to_lowercase()))
             .collect();
 
         let all = ctx.db.list_memories().await?;
-        let results: Vec<_> = all.into_iter().filter(|m| {
-            terms.iter().any(|t| {
-                m.brief.to_lowercase().contains(t) ||
-                m.content.as_deref().unwrap_or("").to_lowercase().contains(t)
+        let results: Vec<_> = all
+            .into_iter()
+            .filter(|m| {
+                terms.iter().any(|t| {
+                    m.brief.to_lowercase().contains(t)
+                        || m.content
+                            .as_deref()
+                            .unwrap_or("")
+                            .to_lowercase()
+                            .contains(t)
+                })
             })
-        }).collect();
+            .collect();
 
         let content = if results.is_empty() {
             "No matching memories found.".into()
         } else {
-            let lines: Vec<String> = results.iter()
-                .map(|r| format!("[{}] Brief: {}\nContent: {}", r.id, r.brief, r.content.as_deref().unwrap_or("(no content)")))
+            let lines: Vec<String> = results
+                .iter()
+                .map(|r| {
+                    format!(
+                        "[{}] Brief: {}\nContent: {}",
+                        r.id,
+                        r.brief,
+                        r.content.as_deref().unwrap_or("(no content)")
+                    )
+                })
                 .collect();
             lines.join("\n---\n")
         };

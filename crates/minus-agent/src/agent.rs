@@ -139,12 +139,24 @@ impl Agent {
 
         // 6b. Fetch available channels
         let mut channels_info = Vec::new();
-        if let Some(channels_service) = self.channels.read().await.as_ref().and_then(|w| w.upgrade()) {
+        if let Some(channels_service) = self
+            .channels
+            .read()
+            .await
+            .as_ref()
+            .and_then(|w| w.upgrade())
+        {
             let statuses = channels_service.list_channels().await;
             for status in statuses {
                 if status.is_ready {
-                    let chat_str = status.active_chat_id.map(|c| c.0).unwrap_or_else(|| "none".to_string());
-                    channels_info.push(format!("{} (id: {}, chat: {})", status.name, status.id, chat_str));
+                    let chat_str = status
+                        .active_chat_id
+                        .map(|c| c.0)
+                        .unwrap_or_else(|| "none".to_string());
+                    channels_info.push(format!(
+                        "{} (id: {}, chat: {})",
+                        status.name, status.id, chat_str
+                    ));
                 }
             }
         }
@@ -230,11 +242,12 @@ impl Agent {
                 .and_then(|n| n.as_str())
                 .map(|s| s.to_string());
 
-            let content = if msg.content.is_empty() && role == Role::Assistant && tool_calls.is_some() {
-                None
-            } else {
-                Some(msg.content.clone())
-            };
+            let content =
+                if msg.content.is_empty() && role == Role::Assistant && tool_calls.is_some() {
+                    None
+                } else {
+                    Some(msg.content.clone())
+                };
 
             messages.push(ProviderMessage {
                 role,
@@ -281,9 +294,10 @@ impl Agent {
             }
         } else {
             None
-        }.or_else(|| {
+        }
+        .or_else(|| {
             let endpoint_key = format!("PROVIDER_{}_ENDPOINT", provider_id.to_uppercase());
-             if let Some(vault) = &self.vault {
+            if let Some(vault) = &self.vault {
                 match vault.get_secret(&endpoint_key) {
                     Ok(bytes) => Some(String::from_utf8_lossy(&bytes).to_string()),
                     Err(_) => {
@@ -353,7 +367,11 @@ impl Agent {
 
                 request.messages.push(ProviderMessage {
                     role: Role::Assistant,
-                    content: if assistant_content.is_empty() { None } else { Some(assistant_content) },
+                    content: if assistant_content.is_empty() {
+                        None
+                    } else {
+                        Some(assistant_content)
+                    },
                     tool_calls: Some(response.tool_calls.clone()),
                     tool_call_id: None,
                     name: None,
@@ -410,7 +428,8 @@ impl Agent {
                             ToolResult {
                                 tool_call_id: tc.id.clone(),
                                 name: tc.name.clone(),
-                                content: "Error: Channels service not available in agent".to_string(),
+                                content: "Error: Channels service not available in agent"
+                                    .to_string(),
                                 is_error: true,
                             }
                         }

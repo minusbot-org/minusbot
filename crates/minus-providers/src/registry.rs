@@ -76,9 +76,12 @@ impl ProviderRegistry {
             .default_provider()
             .with_context(|| "No default provider configured")?;
 
-        let text_provider = provider
-            .as_text_provider()
-            .with_context(|| format!("Provider '{}' does not support text generation", provider.id()))?;
+        let text_provider = provider.as_text_provider().with_context(|| {
+            format!(
+                "Provider '{}' does not support text generation",
+                provider.id()
+            )
+        })?;
 
         // Use default model if not specified in request
         let mut request = request;
@@ -99,14 +102,16 @@ impl ProviderRegistry {
             .default_provider()
             .with_context(|| "No default provider configured")?;
 
-        let text_provider = provider
-            .as_text_provider()
-            .with_context(|| format!("Provider '{}' does not support text generation", provider.id()))?;
+        let text_provider = provider.as_text_provider().with_context(|| {
+            format!(
+                "Provider '{}' does not support text generation",
+                provider.id()
+            )
+        })?;
 
         text_provider.get_text_models(secret_key).await
     }
 }
-
 
 impl Default for ProviderRegistry {
     fn default() -> Self {

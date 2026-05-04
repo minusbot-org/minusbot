@@ -1,7 +1,7 @@
+use crate::permissions::Permission;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use crate::permissions::Permission;
 
 // =============================================================================
 // ID newtypes

@@ -1,6 +1,6 @@
-use minus_api::{Command, CommandContext, CommandDefinition};
 use anyhow::Result;
 use async_trait::async_trait;
+use minus_api::{Command, CommandContext, CommandDefinition};
 
 pub struct ShutdownCommand;
 

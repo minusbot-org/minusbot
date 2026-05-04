@@ -1,5 +1,5 @@
-mod provider;
 mod custom_provider;
+mod provider;
 
-pub use provider::OpenAiProvider;
 pub use custom_provider::CustomOpenAiProvider;
+pub use provider::OpenAiProvider;

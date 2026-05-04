@@ -1,6 +1,8 @@
-use minus_api::{ChatId, NotificationPacket, NotificationSeverity, CommandDefinition, Command, CommandContext};
 use anyhow::Result;
 use async_trait::async_trait;
+use minus_api::{
+    ChatId, Command, CommandContext, CommandDefinition, NotificationPacket, NotificationSeverity,
+};
 
 pub struct ChatListCommand;
 
@@ -30,10 +32,16 @@ impl Command for ChatListCommand {
                 if chats.is_empty() {
                     return Ok("No chats found.".into());
                 }
-                let lines: Vec<String> = chats.iter()
+                let lines: Vec<String> = chats
+                    .iter()
                     .map(|c| {
                         let marker = if c.id == ctx.chat_id.0 { "*" } else { " " };
-                        format!("{} {} — {}", marker, c.id, c.title.as_deref().unwrap_or("(no title)"))
+                        format!(
+                            "{} {} — {}",
+                            marker,
+                            c.id,
+                            c.title.as_deref().unwrap_or("(no title)")
+                        )
                     })
                     .collect();
                 Ok(format!("Chats:\n{}", lines.join("\n")))
@@ -48,39 +56,62 @@ impl Command for ChatListCommand {
                     Some(c) => {
                         // Fetch message history and notify channel about chat switch
                         let messages = db.get_messages(&c.id, 50).await.unwrap_or_default();
-                        ctx.channel.on_chat_switch(&ChatId(c.id.clone()), messages).await?;
+                        ctx.channel
+                            .on_chat_switch(&ChatId(c.id.clone()), messages)
+                            .await?;
 
                         // Attempt to update channel config
                         let provider_id = format!("channel.{}", ctx.channel_id.0);
-                        if let Some(channel_config) = ctx.config_registry.get_provider(&provider_id).await {
+                        if let Some(channel_config) =
+                            ctx.config_registry.get_provider(&provider_id).await
+                        {
                             if let Err(e) = channel_config.set_config("chat", &c.id).await {
-                                let _ = ctx.channel.send_notification(NotificationPacket {
-                                    chat_id: ctx.chat_id.clone(),
-                                    severity: NotificationSeverity::Warning,
-                                    content: format!("Failed to save default chat to config: {}", e),
-                                }).await;
+                                let _ = ctx
+                                    .channel
+                                    .send_notification(NotificationPacket {
+                                        chat_id: ctx.chat_id.clone(),
+                                        severity: NotificationSeverity::Warning,
+                                        content: format!(
+                                            "Failed to save default chat to config: {}",
+                                            e
+                                        ),
+                                    })
+                                    .await;
                             }
                         }
-                        
-                        Ok(format!("Switched to chat: {}", c.title.as_deref().unwrap_or(&c.id)))
+
+                        Ok(format!(
+                            "Switched to chat: {}",
+                            c.title.as_deref().unwrap_or(&c.id)
+                        ))
                     }
                     None => Ok(format!("Chat '{}' not found.", id)),
                 }
             }
             "new" => {
-                let title = if args.len() > 1 { Some(args[1..].join(" ")) } else { None };
+                let title = if args.len() > 1 {
+                    Some(args[1..].join(" "))
+                } else {
+                    None
+                };
                 let chats = db.list_chats().await?;
                 let id = format!("chat-{}", chats.len() + 1);
-                db.ensure_chat(&id, &ctx.channel_id.0, &id, title.as_deref()).await?;
-                
+                db.ensure_chat(&id, &ctx.channel_id.0, &id, title.as_deref())
+                    .await?;
+
                 // Notify channel about new chat
-                ctx.channel.send_notification(NotificationPacket {
-                    chat_id: ctx.chat_id.clone(),
-                    severity: NotificationSeverity::Success,
-                    content: format!("Created new chat: {}", id),
-                }).await?;
-                
-                Ok(format!("Created new chat: {}", title.unwrap_or_else(|| id.clone())))
+                ctx.channel
+                    .send_notification(NotificationPacket {
+                        chat_id: ctx.chat_id.clone(),
+                        severity: NotificationSeverity::Success,
+                        content: format!("Created new chat: {}", id),
+                    })
+                    .await?;
+
+                Ok(format!(
+                    "Created new chat: {}",
+                    title.unwrap_or_else(|| id.clone())
+                ))
             }
             "rename" => {
                 if args.len() < 2 {
@@ -91,10 +122,20 @@ impl Command for ChatListCommand {
                 Ok(format!("Chat renamed to: {}", title))
             }
             "read" => {
-                let limit = if args.len() > 2 { args[2].parse().unwrap_or(10) } else { 10 };
-                let target_id = if args.len() > 1 { &args[1] } else { &ctx.chat_id.0 };
+                let limit = if args.len() > 2 {
+                    args[2].parse().unwrap_or(10)
+                } else {
+                    10
+                };
+                let target_id = if args.len() > 1 {
+                    &args[1]
+                } else {
+                    &ctx.chat_id.0
+                };
                 let messages = db.get_messages(target_id, limit).await?;
-                let lines: Vec<String> = messages.iter().rev()
+                let lines: Vec<String> = messages
+                    .iter()
+                    .rev()
                     .map(|m| format!("[{}] {}: {}", m.created_at, m.role, m.content))
                     .collect();
                 Ok(format!("History for {}:\n{}", target_id, lines.join("\n")))

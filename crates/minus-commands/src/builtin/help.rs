@@ -1,6 +1,6 @@
-use minus_api::{Command, CommandContext, CommandDefinition};
 use anyhow::Result;
 use async_trait::async_trait;
+use minus_api::{Command, CommandContext, CommandDefinition};
 
 pub struct HelpCommand;
 
@@ -29,14 +29,17 @@ impl Command for HelpCommand {
                 current_category = cmd.category.clone();
                 help.push_str(&format!("\n[{}]\n", current_category.to_uppercase()));
             }
-            
+
             let aliases = if cmd.aliases.is_empty() {
                 String::new()
             } else {
                 format!(" (aliases: {})", cmd.aliases.join(", "))
             };
-            
-            help.push_str(&format!("  {:<25} — {}{}\n", cmd.usage, cmd.description, aliases));
+
+            help.push_str(&format!(
+                "  {:<25} — {}{}\n",
+                cmd.usage, cmd.description, aliases
+            ));
         }
 
         Ok(help)

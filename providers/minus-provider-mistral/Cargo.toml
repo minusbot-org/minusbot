@@ -1,0 +1,15 @@
+[package]
+name = "minus-provider-mistral"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+minus-api = { path = "../../crates/minus-api" }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+mistralai-client = "0.14.0"

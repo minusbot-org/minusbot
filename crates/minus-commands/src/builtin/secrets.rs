@@ -1,6 +1,6 @@
-use minus_api::{Command, CommandContext, CommandDefinition};
 use anyhow::Result;
 use async_trait::async_trait;
+use minus_api::{Command, CommandContext, CommandDefinition};
 
 pub struct SecretCommand;
 
@@ -23,7 +23,8 @@ impl Command for SecretCommand {
             if secrets.is_empty() {
                 return Ok("No secret declarations found.".into());
             }
-            let lines: Vec<String> = secrets.iter()
+            let lines: Vec<String> = secrets
+                .iter()
                 .map(|s| {
                     let status = if s.approved { "[OK]" } else { "[PENDING]" };
                     format!("{} {} — {}", status, s.key, s.description)
@@ -33,23 +34,23 @@ impl Command for SecretCommand {
         }
 
         let action = &args[0];
-        
+
         if action == "set" {
             if args.len() < 3 {
                 return Ok("Usage: /secrets set <component/key> <value>".into());
             }
             let target = &args[1];
             let value = &args[2];
-            
+
             let (comp_id, key) = if let Some(pos) = target.find('/') {
-                (&target[..pos], &target[pos+1..])
+                (&target[..pos], &target[pos + 1..])
             } else {
                 ("", target.as_str())
             };
 
             let store = ctx.secrets.get_store(comp_id).await?;
             store.put_secret(key, value.as_bytes()).await?;
-            
+
             if comp_id.is_empty() {
                 return Ok(format!("Successfully set root secret: {}", key));
             } else {

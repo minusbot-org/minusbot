@@ -1,6 +1,6 @@
-use crate::types::*;
 use crate::events::*;
 use crate::permissions::*;
+use crate::types::*;
 use anyhow::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -14,37 +14,51 @@ use std::sync::Arc;
 pub trait Channel: Send + Sync {
     fn id(&self) -> &'static str;
     fn name(&self) -> &'static str;
-    
+
     // Status
     fn is_enabled(&self) -> bool;
     async fn set_enabled(&self, flag: bool) -> Result<bool>;
     async fn is_ready(&self) -> bool;
-    
+
     // Chat context
     async fn get_active_chat(&self) -> Option<ChatId>;
     async fn set_active_chat(&self, chat_id: ChatId) -> Result<()>;
 
     // Lifecycle
     async fn start(&self, ctx: ChannelContext) -> Result<()>;
-    async fn stop(&self) -> Result<()> { Ok(()) }
+    async fn stop(&self) -> Result<()> {
+        Ok(())
+    }
 
     // Triggers (Outgoing from daemon to channel)
     async fn send_message(&self, packet: MessagePacket) -> Result<()>;
     async fn send_notification(&self, packet: NotificationPacket) -> Result<()>;
     async fn send_tool_call(&self, packet: ToolCallPacket) -> Result<()>;
     async fn send_command_feedback(&self, feedback: CommandFeedback) -> Result<()>;
-    async fn set_typing(&self, _chat_id: ChatId, _flag: bool) -> Result<()> { Ok(()) }
-    async fn is_chat_active(&self, _chat_id: ChatId) -> bool { false }
-    
+    async fn set_typing(&self, _chat_id: ChatId, _flag: bool) -> Result<()> {
+        Ok(())
+    }
+    async fn is_chat_active(&self, _chat_id: ChatId) -> bool {
+        false
+    }
+
     // Platform features
-    async fn register_commands(&self, _commands: Vec<CommandDefinition>) -> Result<()> { Ok(()) }
+    async fn register_commands(&self, _commands: Vec<CommandDefinition>) -> Result<()> {
+        Ok(())
+    }
 
     // Events (Informing channel about state changes)
-    async fn on_chat_switch(&self, _chat_id: &ChatId, _messages: Vec<Message>) -> Result<()> { Ok(()) }
+    async fn on_chat_switch(&self, _chat_id: &ChatId, _messages: Vec<Message>) -> Result<()> {
+        Ok(())
+    }
 
     // Setup and Whitelisting
-    fn has_available_setup(&self) -> bool { false }
-    async fn setup(&self) -> Result<String> { anyhow::bail!("Setup not supported for this channel") }
+    fn has_available_setup(&self) -> bool {
+        false
+    }
+    async fn setup(&self) -> Result<String> {
+        anyhow::bail!("Setup not supported for this channel")
+    }
 
     fn config(&self) -> Option<Arc<dyn ConfigProvider>> {
         None
@@ -62,7 +76,9 @@ pub trait Provider: Send + Sync {
         None
     }
 
-    async fn is_ready(&self) -> bool { true }
+    async fn is_ready(&self) -> bool {
+        true
+    }
 
     fn config(&self) -> Option<Arc<dyn ConfigProvider>> {
         None
@@ -82,10 +98,21 @@ pub trait Integration: Send + Sync {
     fn required_secrets(&self) -> Vec<SecretDeclaration>;
     fn tools(&self) -> Vec<ToolDefinition>;
     async fn call_tool(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult>;
-    
-    fn commands(&self) -> Vec<CommandDefinition> { Vec::new() }
-    async fn execute_command(&self, name: String, _args: Vec<String>, _ctx: CommandContext) -> Result<String> {
-        anyhow::bail!("Command {} not implemented for integration {}", name, self.id())
+
+    fn commands(&self) -> Vec<CommandDefinition> {
+        Vec::new()
+    }
+    async fn execute_command(
+        &self,
+        name: String,
+        _args: Vec<String>,
+        _ctx: CommandContext,
+    ) -> Result<String> {
+        anyhow::bail!(
+            "Command {} not implemented for integration {}",
+            name,
+            self.id()
+        )
     }
 }
 
@@ -154,23 +181,51 @@ pub trait MinusDatabase: Send + Sync {
     // Chat management
     async fn list_chats(&self) -> Result<Vec<Chat>>;
     async fn get_chat(&self, id: &str) -> Result<Option<Chat>>;
-    async fn ensure_chat(&self, id: &str, channel_id: &str, external_id: &str, title: Option<&str>) -> Result<()>;
+    async fn ensure_chat(
+        &self,
+        id: &str,
+        channel_id: &str,
+        external_id: &str,
+        title: Option<&str>,
+    ) -> Result<()>;
     async fn rename_chat(&self, id: &str, title: &str) -> Result<()>;
     async fn delete_chat(&self, id: &str) -> Result<()>;
 
     // Message management
     async fn get_messages(&self, chat_id: &str, limit: i64) -> Result<Vec<Message>>;
-    async fn save_message(&self, id: &str, chat_id: &str, role: &str, content: &str, metadata: Option<&str>) -> Result<()>;
+    async fn save_message(
+        &self,
+        id: &str,
+        chat_id: &str,
+        role: &str,
+        content: &str,
+        metadata: Option<&str>,
+    ) -> Result<()>;
     async fn delete_messages(&self, chat_id: &str) -> Result<()>;
 
     // Audit management
-    async fn log_audit(&self, id: &str, actor: &str, action: &str, target: Option<&str>, metadata: Option<&str>, created_at: &str) -> Result<()>;
+    async fn log_audit(
+        &self,
+        id: &str,
+        actor: &str,
+        action: &str,
+        target: Option<&str>,
+        metadata: Option<&str>,
+        created_at: &str,
+    ) -> Result<()>;
     async fn tail_audit(&self, limit: i64) -> Result<Vec<AuditEvent>>;
 
     // Memory management
     async fn list_memories(&self) -> Result<Vec<Memory>>;
     async fn get_important_memories(&self) -> Result<Vec<Memory>>;
-    async fn save_memory(&self, id: &str, kind: &str, brief: &str, content: Option<&str>, is_important: bool) -> Result<()>;
+    async fn save_memory(
+        &self,
+        id: &str,
+        kind: &str,
+        brief: &str,
+        content: Option<&str>,
+        is_important: bool,
+    ) -> Result<()>;
     async fn delete_memory(&self, id: &str) -> Result<bool>;
 }
 
@@ -185,7 +240,14 @@ pub trait MinusChannels: Send + Sync {
 pub trait MinusScheduler: Send + Sync {
     async fn list_tasks(&self) -> Result<Vec<SchedulerTask>>;
     async fn delete_task(&self, id: &str) -> Result<bool>;
-    async fn create_task(&self, name: &str, schedule: &str, prompt: &str, target_chat_id: Option<&str>, generate: bool) -> Result<String>;
+    async fn create_task(
+        &self,
+        name: &str,
+        schedule: &str,
+        prompt: &str,
+        target_chat_id: Option<&str>,
+        generate: bool,
+    ) -> Result<String>;
 }
 
 #[async_trait]
@@ -229,7 +291,13 @@ pub struct AgentStatus {
 #[async_trait]
 pub trait MinusAgent: Send + Sync {
     async fn list_agents(self: Arc<Self>) -> Result<Vec<AgentStatus>>;
-    async fn call_agent(self: Arc<Self>, agent_id: &str, content: &str, chat_id: ChatId, channel_id: ChannelId) -> Result<String>;
+    async fn call_agent(
+        self: Arc<Self>,
+        agent_id: &str,
+        content: &str,
+        chat_id: ChatId,
+        channel_id: ChannelId,
+    ) -> Result<String>;
 }
 
 #[async_trait]

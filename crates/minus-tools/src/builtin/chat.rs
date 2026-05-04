@@ -1,4 +1,4 @@
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use minus_api::{Tool, ToolCall, ToolContext, ToolDefinition, ToolResult, ToolRisk};
 use serde_json::json;
@@ -27,8 +27,16 @@ impl Tool for ChatListTool {
         let content = if chats.is_empty() {
             "No chats found.".into()
         } else {
-            let lines: Vec<String> = chats.iter()
-                .map(|c| format!("[{}] {} (Channel: {})", c.id, c.title.as_deref().unwrap_or("(no title)"), c.channel_id))
+            let lines: Vec<String> = chats
+                .iter()
+                .map(|c| {
+                    format!(
+                        "[{}] {} (Channel: {})",
+                        c.id,
+                        c.title.as_deref().unwrap_or("(no title)"),
+                        c.channel_id
+                    )
+                })
                 .collect();
             lines.join("\n")
         };
@@ -65,14 +73,17 @@ impl Tool for ChatReadTool {
     }
 
     async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
-        let chat_id = call.arguments["chat_id"].as_str().context("Missing chat_id")?;
+        let chat_id = call.arguments["chat_id"]
+            .as_str()
+            .context("Missing chat_id")?;
         let limit = call.arguments["limit"].as_i64().unwrap_or(20);
 
         let messages = ctx.db.get_messages(chat_id, limit).await?;
         let content = if messages.is_empty() {
             "No messages found in this chat.".into()
         } else {
-            let lines: Vec<String> = messages.iter()
+            let lines: Vec<String> = messages
+                .iter()
                 .map(|m| format!("[{}] {}: {}", m.created_at, m.role, m.content))
                 .collect();
             lines.join("\n")
@@ -99,8 +110,8 @@ impl Tool for ChatSearchTool {
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "terms": { 
-                        "type": "array", 
+                    "terms": {
+                        "type": "array",
                         "items": { "type": "string" },
                         "description": "Keywords to search for"
                     },
@@ -114,7 +125,8 @@ impl Tool for ChatSearchTool {
     }
 
     async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
-        let terms: Vec<String> = call.arguments["terms"].as_array()
+        let terms: Vec<String> = call.arguments["terms"]
+            .as_array()
             .context("Missing terms")?
             .iter()
             .filter_map(|v| v.as_str().map(|s| s.to_lowercase()))
@@ -135,8 +147,15 @@ impl Tool for ChatSearchTool {
         let content = if results.is_empty() {
             "No matching messages found.".into()
         } else {
-            let lines: Vec<String> = results.iter().take(20)
-                .map(|m| format!("[{}] Chat: {} | {}: {}", m.created_at, m.chat_id, m.role, m.content))
+            let lines: Vec<String> = results
+                .iter()
+                .take(20)
+                .map(|m| {
+                    format!(
+                        "[{}] Chat: {} | {}: {}",
+                        m.created_at, m.chat_id, m.role, m.content
+                    )
+                })
                 .collect();
             lines.join("\n")
         };
@@ -173,12 +192,16 @@ impl Tool for ChatSendTool {
     }
 
     async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
-        let chat_id = call.arguments["chat_id"].as_str().context("Missing chat_id")?;
-        let content = call.arguments["content"].as_str().context("Missing content")?;
+        let chat_id = call.arguments["chat_id"]
+            .as_str()
+            .context("Missing chat_id")?;
+        let content = call.arguments["content"]
+            .as_str()
+            .context("Missing content")?;
         let target_chat_id = minus_api::ChatId(chat_id.to_string());
 
         let packet = minus_api::MessagePacket::new(target_chat_id.clone(), "assistant", content);
-        
+
         let statuses = ctx.channels.list_channels().await;
         let mut sent_count = 0;
         for status in statuses {
@@ -193,7 +216,10 @@ impl Tool for ChatSendTool {
         Ok(ToolResult {
             tool_call_id: call.id,
             name: "chat_send".into(),
-            content: format!("Message sent to {} channels for chat {}", sent_count, chat_id),
+            content: format!(
+                "Message sent to {} channels for chat {}",
+                sent_count, chat_id
+            ),
             is_error: false,
         })
     }
@@ -221,9 +247,11 @@ impl Tool for ChatReplyTool {
     }
 
     async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
-        let content = call.arguments["content"].as_str().context("Missing content")?;
+        let content = call.arguments["content"]
+            .as_str()
+            .context("Missing content")?;
         let packet = minus_api::MessagePacket::new(ctx.chat_id.clone(), "assistant", content);
-        
+
         let statuses = ctx.channels.list_channels().await;
         for status in statuses {
             if let Some(channel) = ctx.channels.get_channel(&status.id).await {

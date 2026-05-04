@@ -97,7 +97,10 @@ impl SkillManager {
         if removed {
             Ok(format!("Unloaded skill \"{}\"", skill_name))
         } else {
-            Ok(format!("Skill \"{}\" was not loaded for this chat", skill_name))
+            Ok(format!(
+                "Skill \"{}\" was not loaded for this chat",
+                skill_name
+            ))
         }
     }
 
@@ -138,7 +141,9 @@ impl SkillManager {
                     || s.description
                         .as_ref()
                         .map_or(false, |d| d.to_lowercase().contains(&query_lower))
-                    || s.tags.iter().any(|t| t.to_lowercase().contains(&query_lower))
+                    || s.tags
+                        .iter()
+                        .any(|t| t.to_lowercase().contains(&query_lower))
             })
             .collect())
     }

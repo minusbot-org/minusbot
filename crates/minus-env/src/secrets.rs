@@ -3,7 +3,14 @@ use std::collections::HashMap;
 use std::path::Path;
 
 /// Sensitive keywords — if a key contains any of these, the value is treated as secret.
-const SENSITIVE_KEYWORDS: &[&str] = &["KEY", "TOKEN", "SECRET", "PASSWORD", "PRIVATE", "CREDENTIAL"];
+const SENSITIVE_KEYWORDS: &[&str] = &[
+    "KEY",
+    "TOKEN",
+    "SECRET",
+    "PASSWORD",
+    "PRIVATE",
+    "CREDENTIAL",
+];
 
 /// Manages the secrets.env file containing private configuration.
 #[derive(Debug, Clone)]

@@ -9,7 +9,11 @@ pub struct OpenRouterProvider {
 }
 
 impl OpenRouterProvider {
-    pub fn new(api_key: Option<String>, base_url: Option<String>, config_path: Option<std::path::PathBuf>) -> Self {
+    pub fn new(
+        api_key: Option<String>,
+        base_url: Option<String>,
+        config_path: Option<std::path::PathBuf>,
+    ) -> Self {
         let base = base_url.unwrap_or_else(|| "https://openrouter.ai/api/v1".to_string());
         Self {
             inner: minus_provider_openai::OpenAiProvider::new(api_key, Some(base), config_path),

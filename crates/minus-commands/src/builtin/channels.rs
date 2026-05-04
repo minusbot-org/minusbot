@@ -31,15 +31,22 @@ impl Command for ChannelsCommand {
                 for c in channels {
                     let enabled_str = if c.is_enabled { "ENABLED" } else { "DISABLED" };
                     let ready_str = if c.is_ready { "READY" } else { "NOT READY" };
-                    let chat_str = c.active_chat_id.map(|id| id.0).unwrap_or_else(|| "none".to_string());
-                    
-                    res.push_str(&format!("- [{}] {}: {} | {} | Active Chat: {}\n", 
-                        c.id, c.name, enabled_str, ready_str, chat_str));
+                    let chat_str = c
+                        .active_chat_id
+                        .map(|id| id.0)
+                        .unwrap_or_else(|| "none".to_string());
+
+                    res.push_str(&format!(
+                        "- [{}] {}: {} | {} | Active Chat: {}\n",
+                        c.id, c.name, enabled_str, ready_str, chat_str
+                    ));
                 }
                 Ok(res)
             }
             "enable" => {
-                let id = args.get(1).context("Missing channel ID: /channels enable <id>")?;
+                let id = args
+                    .get(1)
+                    .context("Missing channel ID: /channels enable <id>")?;
                 if ctx.channels.set_channel_enabled(id, true).await? {
                     Ok(format!("Channel '{}' enabled.", id))
                 } else {
@@ -47,7 +54,9 @@ impl Command for ChannelsCommand {
                 }
             }
             "disable" => {
-                let id = args.get(1).context("Missing channel ID: /channels disable <id>")?;
+                let id = args
+                    .get(1)
+                    .context("Missing channel ID: /channels disable <id>")?;
                 if ctx.channels.set_channel_enabled(id, false).await? {
                     Ok(format!("Channel '{}' disabled.", id))
                 } else {
@@ -55,10 +64,18 @@ impl Command for ChannelsCommand {
                 }
             }
             "config" => {
-                let id = args.get(1).context("Missing channel ID: /channels config <id> <get|set> [key] [value]")?;
-                let chan = ctx.channels.get_channel(id).await.context("Channel not found")?;
-                let config = chan.config().context("Channel does not support configuration")?;
-                
+                let id = args
+                    .get(1)
+                    .context("Missing channel ID: /channels config <id> <get|set> [key] [value]")?;
+                let chan = ctx
+                    .channels
+                    .get_channel(id)
+                    .await
+                    .context("Channel not found")?;
+                let config = chan
+                    .config()
+                    .context("Channel does not support configuration")?;
+
                 let op = args.get(2).map(|s| s.as_str()).unwrap_or("list");
                 match op {
                     "list" => {
@@ -68,42 +85,81 @@ impl Command for ChannelsCommand {
                         }
                         let mut res = format!("Configuration for channel '{}':\n", id);
                         for key in keys {
-                            let val = config.read_config(&key).await?.unwrap_or_else(|| "(not set)".to_string());
+                            let val = config
+                                .read_config(&key)
+                                .await?
+                                .unwrap_or_else(|| "(not set)".to_string());
                             res.push_str(&format!("- {}: {}\n", key, val));
                         }
                         Ok(res)
                     }
                     "get" => {
-                        let key = args.get(3).context("Missing key: /channels config <id> get <key>")?;
-                        let val = config.read_config(key).await?.unwrap_or_else(|| "(not set)".to_string());
+                        let key = args
+                            .get(3)
+                            .context("Missing key: /channels config <id> get <key>")?;
+                        let val = config
+                            .read_config(key)
+                            .await?
+                            .unwrap_or_else(|| "(not set)".to_string());
                         Ok(format!("{} = {}", key, val))
                     }
                     "set" => {
-                        let key = args.get(3).context("Missing key: /channels config <id> set <key> <value>")?;
-                        let val = args.get(4).context("Missing value: /channels config <id> set <key> <value>")?;
+                        let key = args
+                            .get(3)
+                            .context("Missing key: /channels config <id> set <key> <value>")?;
+                        let val = args
+                            .get(4)
+                            .context("Missing value: /channels config <id> set <key> <value>")?;
                         config.set_config(key, val).await?;
-                        Ok(format!("Configuration updated for channel '{}': {} = {}", id, key, val))
+                        Ok(format!(
+                            "Configuration updated for channel '{}': {} = {}",
+                            id, key, val
+                        ))
                     }
                     _ => bail!("Unknown config operation: {}. Use list, get, or set.", op),
                 }
             }
             "setup" => {
-                let id = args.get(1).context("Missing channel ID: /channels setup <id>")?;
-                let chan = ctx.channels.get_channel(id).await.context("Channel not found")?;
+                let id = args
+                    .get(1)
+                    .context("Missing channel ID: /channels setup <id>")?;
+                let chan = ctx
+                    .channels
+                    .get_channel(id)
+                    .await
+                    .context("Channel not found")?;
                 if !chan.has_available_setup() {
                     return Ok(format!("Channel '{}' does not support setup.", id));
                 }
                 let pin = chan.setup().await?;
-                Ok(format!("Setup initiated for channel '{}'.\nUse the following PIN: {}", id, pin))
+                Ok(format!(
+                    "Setup initiated for channel '{}'.\nUse the following PIN: {}",
+                    id, pin
+                ))
             }
             "setchat" => {
-                let id = args.get(1).context("Missing channel ID: /channels setchat <id> <chat_id>")?;
-                let chat_id = args.get(2).context("Missing chat ID: /channels setchat <id> <chat_id>")?;
-                let chan = ctx.channels.get_channel(id).await.context("Channel not found")?;
-                chan.set_active_chat(minus_api::ChatId(chat_id.to_string())).await?;
-                Ok(format!("Active chat for channel '{}' set to '{}'.", id, chat_id))
+                let id = args
+                    .get(1)
+                    .context("Missing channel ID: /channels setchat <id> <chat_id>")?;
+                let chat_id = args
+                    .get(2)
+                    .context("Missing chat ID: /channels setchat <id> <chat_id>")?;
+                let chan = ctx
+                    .channels
+                    .get_channel(id)
+                    .await
+                    .context("Channel not found")?;
+                chan.set_active_chat(minus_api::ChatId(chat_id.to_string()))
+                    .await?;
+                Ok(format!(
+                    "Active chat for channel '{}' set to '{}'.",
+                    id, chat_id
+                ))
             }
-            _ => bail!("Unknown subcommand: {}. Use list, enable, disable, config, setup, or setchat.", subcommand),
+            _ => bail!(
+                "Unknown subcommand: {}. Use list, enable, disable, config, setup, or setchat.",
+                subcommand
+            ),
         }
     }
 }

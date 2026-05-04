@@ -1,8 +1,8 @@
 use anyhow::Result;
 use minus_agent::Agent;
+use minus_api::*;
 use minus_channel_cli::CliChannel;
 use minus_channel_telegram::TelegramChannel;
-use minus_api::*;
 
 use minus_db::Database;
 use minus_env::{AppConfig, DataDir, SecretsManager};
@@ -23,17 +23,17 @@ const VERSION: &str = "0.1.0";
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let debug_mode = std::env::var("MINUS_DEBUG").map(|v| v == "1").unwrap_or(false)
+    let debug_mode = std::env::var("MINUS_DEBUG")
+        .map(|v| v == "1")
+        .unwrap_or(false)
         || std::env::args().any(|a| a == "--debug");
 
     // 1. Setup logging
     let data_dir = DataDir::resolve()?;
     data_dir.ensure_dirs()?;
     let log_file = data_dir.log_file_today();
-    let file_appender = tracing_appender::rolling::never(
-        log_file.parent().unwrap(),
-        log_file.file_name().unwrap(),
-    );
+    let file_appender =
+        tracing_appender::rolling::never(log_file.parent().unwrap(), log_file.file_name().unwrap());
     let (_non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
     let filter = if debug_mode {
@@ -52,7 +52,7 @@ async fn main() -> Result<()> {
         .init();
 
     tracing::info!("Starting minusbot v{} (debug: {})", VERSION, debug_mode);
-    
+
     // Instance lock check
     #[cfg(unix)]
     let socket_path = data_dir.root.join("minusd.sock");
@@ -67,7 +67,7 @@ async fn main() -> Result<()> {
     }
 
     let first_run = data_dir.is_first_run();
-    
+
     // 2. Load config
     let mut config_raw = AppConfig::load(&data_dir.config_path())?;
     if first_run {
@@ -105,21 +105,51 @@ async fn main() -> Result<()> {
         let openai_key = sec.get("PROVIDER_OPENAI_API_KEY").map(|s| s.to_string());
         let openai_base = sec.get("PROVIDER_OPENAI_ENDPOINT").map(|s| s.to_string());
         let openai_cfg = data_dir.component_config_path("provider", "openai");
-        provider_reg.register(Arc::new(OpenAiProvider::new(openai_key, openai_base, Some(openai_cfg))));
+        provider_reg.register(Arc::new(OpenAiProvider::new(
+            openai_key,
+            openai_base,
+            Some(openai_cfg),
+        )));
 
-        let openrouter_key = sec.get("PROVIDER_OPENROUTER_API_KEY").map(|s| s.to_string());
-        let openrouter_base = sec.get("PROVIDER_OPENROUTER_ENDPOINT").map(|s| s.to_string());
+        let openrouter_key = sec
+            .get("PROVIDER_OPENROUTER_API_KEY")
+            .map(|s| s.to_string());
+        let openrouter_base = sec
+            .get("PROVIDER_OPENROUTER_ENDPOINT")
+            .map(|s| s.to_string());
         let openrouter_cfg = data_dir.component_config_path("provider", "openrouter");
-        provider_reg.register(Arc::new(OpenRouterProvider::new(openrouter_key, openrouter_base, Some(openrouter_cfg))));
+        provider_reg.register(Arc::new(OpenRouterProvider::new(
+            openrouter_key,
+            openrouter_base,
+            Some(openrouter_cfg),
+        )));
 
-        let custom_openai_key = sec.get("PROVIDER_CUSTOM_OPENAI_API_KEY").map(|s| s.to_string());
-        let custom_openai_base = sec.get("PROVIDER_CUSTOM_OPENAI_ENDPOINT").map(|s| s.to_string());
+        let custom_openai_key = sec
+            .get("PROVIDER_CUSTOM_OPENAI_API_KEY")
+            .map(|s| s.to_string());
+        let custom_openai_base = sec
+            .get("PROVIDER_CUSTOM_OPENAI_ENDPOINT")
+            .map(|s| s.to_string());
         let custom_openai_cfg = data_dir.component_config_path("provider", "custom_openai");
-        provider_reg.register(Arc::new(minus_provider_openai::CustomOpenAiProvider::new(custom_openai_key, custom_openai_base, Some(custom_openai_cfg))));
+        provider_reg.register(Arc::new(minus_provider_openai::CustomOpenAiProvider::new(
+            custom_openai_key,
+            custom_openai_base,
+            Some(custom_openai_cfg),
+        )));
 
         let google_key = sec.get("PROVIDER_GOOGLE_API_KEY").map(|s| s.to_string());
         let google_cfg = data_dir.component_config_path("provider", "google");
-        provider_reg.register(Arc::new(minus_provider_google::GoogleAiProvider::new(google_key, Some(google_cfg))));
+        provider_reg.register(Arc::new(minus_provider_google::GoogleAiProvider::new(
+            google_key,
+            Some(google_cfg),
+        )));
+
+        let mistral_key = sec.get("PROVIDER_MISTRAL_API_KEY").map(|s| s.to_string());
+        let mistral_cfg = data_dir.component_config_path("provider", "mistral");
+        provider_reg.register(Arc::new(minus_provider_mistral::MistralAiProvider::new(
+            mistral_key,
+            Some(mistral_cfg),
+        )));
     }
 
     {
@@ -155,17 +185,32 @@ async fn main() -> Result<()> {
         eprintln!("\x1b[35m      ██    ██    \x1b[0m");
         eprintln!("\x1b[35m      ██    ██    \x1b[0m");
         eprintln!("\x1b[35m     ██████████   \x1b[0m");
-        eprintln!("\x1b[35m    ███ ████ ███  \x1b[0m  \x1b[1;36mMinusbot v{}\x1b[0m", VERSION);
+        eprintln!(
+            "\x1b[35m    ███ ████ ███  \x1b[0m  \x1b[1;36mMinusbot v{}\x1b[0m",
+            VERSION
+        );
         eprintln!("\x1b[35m     ██████████   \x1b[0m  A self-hosted personal AI assistant");
         eprintln!("\x1b[35m       ██████     \x1b[0m");
         eprintln!("\x1b[35m      ███████     \x1b[0m");
         eprintln!("\x1b[35m       ██  ██     \x1b[0m");
         eprintln!();
-        
-        eprintln!("  \x1b[36mData dir\x1b[0m   -> \x1b[32m{}\x1b[0m", data_dir.root.display());
-        eprintln!("  \x1b[36mDatabase\x1b[0m   -> \x1b[32m{}\x1b[0m", data_dir.database_url());
-        eprintln!("  \x1b[36mProvider\x1b[0m   -> \x1b[33m{}\x1b[0m", provider_display);
-        eprintln!("  \x1b[36mModel\x1b[0m      -> \x1b[33m{}\x1b[0m", model_display);
+
+        eprintln!(
+            "  \x1b[36mData dir\x1b[0m   -> \x1b[32m{}\x1b[0m",
+            data_dir.root.display()
+        );
+        eprintln!(
+            "  \x1b[36mDatabase\x1b[0m   -> \x1b[32m{}\x1b[0m",
+            data_dir.database_url()
+        );
+        eprintln!(
+            "  \x1b[36mProvider\x1b[0m   -> \x1b[33m{}\x1b[0m",
+            provider_display
+        );
+        eprintln!(
+            "  \x1b[36mModel\x1b[0m      -> \x1b[33m{}\x1b[0m",
+            model_display
+        );
         eprintln!();
     }
     let providers = Arc::new(RwLock::new(provider_reg));
@@ -243,7 +288,7 @@ async fn main() -> Result<()> {
     let (msg_tx, mut msg_rx) = mpsc::channel::<IncomingMessage>(64);
     let config_dir = data_dir.root.join("config");
     let cli_channel = Arc::new(CliChannel::new(msg_tx.clone(), config_dir.clone()));
-    
+
     // Register channel via Runtime's register method
     runtime.register_channel(cli_channel.clone()).await;
 
@@ -262,8 +307,12 @@ async fn main() -> Result<()> {
 
     // 14b. Start Telegram channel
     let telegram_secrets = runtime.get_store("channel:telegram").await?;
-    let telegram_channel = Arc::new(TelegramChannel::new(msg_tx.clone(), config_dir.clone(), telegram_secrets));
-    
+    let telegram_channel = Arc::new(TelegramChannel::new(
+        msg_tx.clone(),
+        config_dir.clone(),
+        telegram_secrets,
+    ));
+
     runtime.register_channel(telegram_channel.clone()).await;
 
     let chan_tg = telegram_channel.clone();
@@ -293,12 +342,12 @@ async fn main() -> Result<()> {
             Some(trigger) = job_rx.recv() => {
                 if let Some(chat_id_str) = trigger.target_chat_id {
                     let chat_id = ChatId(chat_id_str);
-                    
+
                     for action in trigger.actions {
                         match action {
                             minus_scheduler::JobAction::MessageSend { content, generate } => {
                                 let msg = MessagePacket::new(chat_id.clone(), "assistant", content.clone());
-                                
+
                                 // Broadcast to all active channels for this chat
                                 let channels = runtime.channels.read().await;
                                 for channel in channels.values() {
@@ -320,13 +369,13 @@ async fn main() -> Result<()> {
                                     if let Some(channel) = source_channel {
                                         let incoming = IncomingMessage::new(chat_id.clone(), ChannelId(channel.id().into()), content);
                                         let response = Runtime::process_message(runtime.clone(), &incoming, channel.clone()).await;
-                                        
+
                                         let response_text = match response {
                                             Ok(text) => text,
                                             Err(e) => format!("Error: {}", e),
                                         };
                                         let out = MessagePacket::new(incoming.chat_id.clone(), "assistant", response_text);
-                                        
+
                                         for ch in channels.values() {
                                             if ch.is_chat_active(incoming.chat_id.clone()).await {
                                                 let _ = ch.send_message(out.clone()).await;
@@ -348,7 +397,7 @@ async fn main() -> Result<()> {
                                 if let Some(channel) = source_channel {
                                     let incoming = IncomingMessage::new(chat_id.clone(), ChannelId(channel.id().into()), prompt);
                                     let agent_name = agent_id.as_deref().unwrap_or("default");
-                                    
+
                                     let response = runtime.agent.clone().handle_message_with_agent(agent_name, &incoming, Some(channel.clone())).await;
 
                                     let response_text = match response {
@@ -356,7 +405,7 @@ async fn main() -> Result<()> {
                                         Err(e) => format!("Error: {}", e),
                                     };
                                     let out = MessagePacket::new(incoming.chat_id.clone(), "assistant", response_text);
-                                    
+
                                     for ch in channels.values() {
                                         if ch.is_chat_active(incoming.chat_id.clone()).await {
                                             let _ = ch.send_message(out.clone()).await;
@@ -386,13 +435,13 @@ async fn main() -> Result<()> {
 
                                     let incoming = IncomingMessage::new(target_chat_id.clone(), ChannelId(channel.id().into()), content);
                                     let response = Runtime::process_message(runtime.clone(), &incoming, channel.clone()).await;
-                                    
+
                                     let response_text = match response {
                                         Ok(text) => text,
                                         Err(e) => format!("Error: {}", e),
                                     };
                                     let out = MessagePacket::new(incoming.chat_id.clone(), "assistant", response_text);
-                                    
+
                                     for ch in channels.values() {
                                         if ch.is_chat_active(incoming.chat_id.clone()).await {
                                             let _ = ch.send_message(out.clone()).await;
@@ -420,7 +469,7 @@ async fn main() -> Result<()> {
                                         Err(e) => format!("Error: {}", e),
                                     };
                                     let out = MessagePacket::new(incoming.chat_id.clone(), "assistant", response_text);
-                                    
+
                                     for ch in channels.values() {
                                         if ch.is_chat_active(incoming.chat_id.clone()).await {
                                             let _ = ch.send_message(out.clone()).await;
@@ -447,7 +496,7 @@ async fn main() -> Result<()> {
                     Err(e) => format!("Error: {}", e),
                 };
                 let out = MessagePacket::new(incoming.chat_id.clone(), "assistant", response_text);
-                
+
                 // Broadcast response to all active channels for this chat
                 let channels = runtime.channels.read().await;
                 for ch in channels.values() {

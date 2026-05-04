@@ -4,26 +4,22 @@ use minus_api::*;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-pub struct OpenAiProvider {
+pub struct MistralAiProvider {
     api_key: Option<String>,
     base_url: String,
     client: reqwest::Client,
     config: Option<Arc<dyn ConfigProvider>>,
 }
 
-impl OpenAiProvider {
-    pub fn new(
-        api_key: Option<String>,
-        base_url: Option<String>,
-        config_path: Option<std::path::PathBuf>,
-    ) -> Self {
-        let id = "provider-openai";
+impl MistralAiProvider {
+    pub fn new(api_key: Option<String>, config_path: Option<std::path::PathBuf>) -> Self {
+        let id = "provider-mistral";
         let config = config_path
             .map(|p| Arc::new(FileConfigProvider::new(id, p)) as Arc<dyn ConfigProvider>);
 
         Self {
             api_key,
-            base_url: base_url.unwrap_or_else(|| "https://api.openai.com/v1".to_string()),
+            base_url: "https://api.mistral.ai/v1".to_string(),
             client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(10))
                 .build()
@@ -34,13 +30,13 @@ impl OpenAiProvider {
 }
 
 #[async_trait]
-impl Provider for OpenAiProvider {
+impl Provider for MistralAiProvider {
     fn id(&self) -> &'static str {
-        "openai"
+        "mistral"
     }
 
     fn name(&self) -> &'static str {
-        "OpenAI"
+        "Mistral AI"
     }
 
     fn config(&self) -> Option<Arc<dyn ConfigProvider>> {
@@ -71,36 +67,44 @@ impl Provider for OpenAiProvider {
 }
 
 #[async_trait]
-impl TextProvider for OpenAiProvider {
+impl TextProvider for MistralAiProvider {
     async fn generate_text(&self, request: ProviderRequest) -> Result<ProviderResponse> {
+        let api_key = &request.options.api_key;
+        if api_key.is_empty() {
+            anyhow::bail!("API key missing for Mistral AI. Set PROVIDER_MISTRAL_API_KEY.");
+        }
+
         let messages: Vec<ApiMessage> = request
             .messages
             .iter()
             .map(|m| {
-                let mut msg = ApiMessage {
-                    role: m.role.to_string(),
+                let role = match m.role {
+                    Role::System => "system",
+                    Role::User => "user",
+                    Role::Assistant => "assistant",
+                    Role::Tool => "tool",
+                };
+
+                let tool_calls = m.tool_calls.as_ref().map(|tcs| {
+                    tcs.iter()
+                        .map(|tc| ApiToolCall {
+                            id: tc.id.clone(),
+                            r#type: "function".into(),
+                            function: ApiFunctionCall {
+                                name: tc.name.clone(),
+                                arguments: tc.arguments.to_string(),
+                            },
+                        })
+                        .collect()
+                });
+
+                ApiMessage {
+                    role: role.to_string(),
                     content: m.content.clone(),
-                    tool_calls: None,
+                    tool_calls,
                     tool_call_id: m.tool_call_id.clone(),
                     name: m.name.clone(),
-                };
-                if let Some(tc) = &m.tool_calls {
-                    if !tc.is_empty() {
-                        msg.tool_calls = Some(
-                            tc.iter()
-                                .map(|c| ApiToolCall {
-                                    id: c.id.clone(),
-                                    r#type: "function".into(),
-                                    function: ApiFunctionCall {
-                                        name: c.name.clone(),
-                                        arguments: c.arguments.to_string(),
-                                    },
-                                })
-                                .collect(),
-                        );
-                    }
                 }
-                msg
             })
             .collect();
 
@@ -123,8 +127,14 @@ impl TextProvider for OpenAiProvider {
             )
         };
 
+        let model = if request.options.model.is_empty() {
+            "mistral-small-latest".to_string()
+        } else {
+            request.options.model.clone()
+        };
+
         let body = ApiRequest {
-            model: request.options.model.clone(),
+            model,
             messages,
             tools,
             temperature: Some(request.options.temperature),
@@ -138,16 +148,7 @@ impl TextProvider for OpenAiProvider {
             .as_deref()
             .unwrap_or(&self.base_url);
         let url = format!("{}/chat/completions", base_url);
-        tracing::debug!(url = %url, model = %request.options.model, "OpenAI API request");
-
-        let api_key = &request.options.api_key;
-        if api_key.is_empty() {
-            anyhow::bail!(
-                "API key missing for {}. Set PROVIDER_{}_API_KEY.",
-                self.name(),
-                self.id().to_uppercase()
-            );
-        }
+        tracing::debug!(url = %url, model = %body.model, "Mistral AI API request");
 
         let resp = self
             .client
@@ -156,26 +157,27 @@ impl TextProvider for OpenAiProvider {
             .json(&body)
             .send()
             .await
-            .context("Failed to send request to OpenAI API")?;
+            .context("Failed to send request to Mistral AI API")?;
 
         let status = resp.status();
         let raw_text = resp.text().await.context("Failed to read response body")?;
-        tracing::debug!(status = %status, "OpenAI API response");
+        tracing::debug!(status = %status, "Mistral AI API response");
 
         if !status.is_success() {
-            anyhow::bail!("OpenAI API error ({}): {}", status, raw_text);
+            anyhow::bail!("Mistral AI API error ({}): {}", status, raw_text);
         }
 
         let raw: serde_json::Value =
-            serde_json::from_str(&raw_text).context("Failed to parse OpenAI response JSON")?;
-        let api_resp: ApiResponse =
-            serde_json::from_value(raw.clone()).context("Failed to deserialize OpenAI response")?;
+            serde_json::from_str(&raw_text).context("Failed to parse Mistral AI response JSON")?;
+        let api_resp: ApiResponse = serde_json::from_value(raw.clone())
+            .context("Failed to deserialize Mistral AI response")?;
+
         let choice = api_resp
             .choices
             .first()
-            .context("No choices in OpenAI response")?;
-
+            .context("No choices in Mistral response")?;
         let content = choice.message.content.clone();
+
         let tool_calls = choice
             .message
             .tool_calls
@@ -212,12 +214,9 @@ impl TextProvider for OpenAiProvider {
         let api_key = secret_key.as_deref().unwrap_or(configured_key);
 
         if api_key.is_empty() {
-            anyhow::bail!(
-                "API key is missing for '{}'. Use '/apikey {} <key>'.",
-                self.name(),
-                self.id()
-            );
+            anyhow::bail!("API key is missing for Mistral AI. Use '/apikey mistral <key>'.");
         }
+
         let url = format!("{}/models", self.base_url);
         let resp = self
             .client
@@ -225,15 +224,20 @@ impl TextProvider for OpenAiProvider {
             .bearer_auth(api_key)
             .send()
             .await
-            .context("Failed to connect to provider API to list models")?;
+            .context("Failed to connect to Mistral AI API to list models")?;
 
         let status = resp.status();
+        let raw_text = resp.text().await.context("Failed to read response body")?;
         if !status.is_success() {
-            let err_text = resp.text().await.unwrap_or_default();
-            anyhow::bail!("API error listing models ({}): {}", status, err_text);
+            anyhow::bail!(
+                "API error listing Mistral models ({}): {}",
+                status,
+                raw_text
+            );
         }
 
-        let json: serde_json::Value = resp.json().await?;
+        let json: serde_json::Value = serde_json::from_str(&raw_text)
+            .context("Failed to parse Mistral models response JSON")?;
         let mut models: Vec<String> = json["data"]
             .as_array()
             .map(|arr| {
@@ -246,8 +250,6 @@ impl TextProvider for OpenAiProvider {
         Ok(models)
     }
 }
-
-// --- API types ---
 
 #[derive(Debug, Serialize)]
 struct ApiRequest {
@@ -310,13 +312,7 @@ struct ApiResponse {
 
 #[derive(Debug, Deserialize)]
 struct ApiChoice {
-    message: ApiResponseMessage,
-}
-
-#[derive(Debug, Deserialize)]
-struct ApiResponseMessage {
-    content: Option<String>,
-    tool_calls: Option<Vec<ApiToolCall>>,
+    message: ApiMessage,
 }
 
 #[derive(Debug, Deserialize)]

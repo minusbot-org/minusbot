@@ -64,12 +64,18 @@ impl Database {
             .collect())
     }
 
-    pub async fn search_messages(&self, terms: &[String], limit: i64) -> Result<Vec<MessageRecord>> {
+    pub async fn search_messages(
+        &self,
+        terms: &[String],
+        limit: i64,
+    ) -> Result<Vec<MessageRecord>> {
         if terms.is_empty() {
             return Ok(vec![]);
         }
 
-        let mut query_str = String::from("SELECT id, chat_id, role, content, metadata_json, created_at FROM messages WHERE ");
+        let mut query_str = String::from(
+            "SELECT id, chat_id, role, content, metadata_json, created_at FROM messages WHERE ",
+        );
         for (i, _) in terms.iter().enumerate() {
             if i > 0 {
                 query_str.push_str(" OR ");

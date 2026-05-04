@@ -1,5 +1,5 @@
-pub mod vault;
 pub mod subvault;
+pub mod vault;
 
-pub use vault::*;
 pub use subvault::*;
+pub use vault::*;

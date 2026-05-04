@@ -1,4 +1,4 @@
-use minus_api::{PolicyAction, PolicyDecision, MinusPolicy};
+use minus_api::{MinusPolicy, PolicyAction, PolicyDecision};
 use minus_env::AppConfig;
 
 /// The policy engine evaluates whether actions are permitted.

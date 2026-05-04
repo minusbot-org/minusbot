@@ -13,8 +13,11 @@ pub fn parse_slash_command(input: &str) -> ParsedCommand {
     let input = input.trim();
     let parts: Vec<&str> = input.splitn(2, ' ').collect();
     let cmd_with_slash = parts[0].to_lowercase();
-    let name = cmd_with_slash.strip_prefix('/').unwrap_or(&cmd_with_slash).to_string();
-    
+    let name = cmd_with_slash
+        .strip_prefix('/')
+        .unwrap_or(&cmd_with_slash)
+        .to_string();
+
     let rest = parts.get(1).map(|s| s.trim()).unwrap_or("");
     let args = if rest.is_empty() {
         Vec::new()

@@ -1,6 +1,6 @@
-use minus_api::{Command, CommandContext, CommandDefinition};
 use anyhow::Result;
 use async_trait::async_trait;
+use minus_api::{Command, CommandContext, CommandDefinition};
 
 pub struct ModelCommand;
 
@@ -32,13 +32,18 @@ impl Command for ModelCommand {
                 return Ok(format!("No text models available for '{}'.", provider_id));
             }
 
-            let lines: Vec<String> = models.iter()
+            let lines: Vec<String> = models
+                .iter()
                 .map(|m| {
                     let marker = if m == &current { "*" } else { " " };
                     format!("{} {}", marker, m)
                 })
                 .collect();
-            return Ok(format!("Text models for '{}':\n{}", provider_id, lines.join("\n")));
+            return Ok(format!(
+                "Text models for '{}':\n{}",
+                provider_id,
+                lines.join("\n")
+            ));
         }
 
         let model = &args[0];

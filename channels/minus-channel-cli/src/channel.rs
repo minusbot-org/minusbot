@@ -26,9 +26,9 @@ pub enum CliPacket {
     Message(MessagePacket),
     Notification(NotificationPacket),
     ToolCall(ToolCallPacket),
-    ChatHistory { 
-        chat_id: ChatId, 
-        messages: Vec<Message> 
+    ChatHistory {
+        chat_id: ChatId,
+        messages: Vec<Message>,
     },
     Disconnect {
         reason: String,
@@ -55,10 +55,7 @@ pub struct CliChannel {
 }
 
 impl CliChannel {
-    pub fn new(
-        message_tx: mpsc::Sender<IncomingMessage>,
-        config_dir: std::path::PathBuf,
-    ) -> Self {
+    pub fn new(message_tx: mpsc::Sender<IncomingMessage>, config_dir: std::path::PathBuf) -> Self {
         let config_path = config_dir.join("channel-cli.toml");
         let config = Arc::new(FileConfigProvider::new("channel.cli", config_path));
 
@@ -109,13 +106,11 @@ impl CliChannel {
         while let Ok(Some(line)) = lines.next_line().await {
             let req: CliRequest = match serde_json::from_str(&line) {
                 Ok(r) => r,
-                Err(_) => {
-                    CliRequest {
-                        chat_id: current_chat_id.0.clone(),
-                        content: line,
-                        secret: None,
-                    }
-                }
+                Err(_) => CliRequest {
+                    chat_id: current_chat_id.0.clone(),
+                    content: line,
+                    secret: None,
+                },
             };
 
             // Check secret if expected
@@ -167,15 +162,21 @@ impl CliChannel {
 
 #[async_trait]
 impl Channel for CliChannel {
-    fn id(&self) -> &'static str { "cli" }
-    fn name(&self) -> &'static str { "CLI Channel" }
+    fn id(&self) -> &'static str {
+        "cli"
+    }
+    fn name(&self) -> &'static str {
+        "CLI Channel"
+    }
 
     fn is_enabled(&self) -> bool {
         self.enabled.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     async fn set_enabled(&self, flag: bool) -> Result<bool> {
-        let old = self.enabled.swap(flag, std::sync::atomic::Ordering::Relaxed);
+        let old = self
+            .enabled
+            .swap(flag, std::sync::atomic::Ordering::Relaxed);
         if old != flag {
             Ok(true)
         } else {
@@ -213,7 +214,7 @@ impl Channel for CliChannel {
                 return true;
             }
         }
-        
+
         // Check active streams
         let streams = self.active_streams.lock().await;
         streams.iter().any(|(cid, _)| cid.0 == chat_id.0)
@@ -367,7 +368,8 @@ impl Channel for CliChannel {
 
     async fn send_notification(&self, packet: NotificationPacket) -> Result<()> {
         let chat_id = packet.chat_id.clone();
-        self.broadcast(&chat_id, CliPacket::Notification(packet)).await
+        self.broadcast(&chat_id, CliPacket::Notification(packet))
+            .await
     }
 
     async fn send_tool_call(&self, packet: ToolCallPacket) -> Result<()> {
@@ -381,12 +383,16 @@ impl Channel for CliChannel {
         } else {
             feedback.result
         };
-        self.broadcast(&feedback.chat_id, CliPacket::Message(MessagePacket {
-            chat_id: feedback.chat_id.clone(),
-            content: text,
-            role: "assistant".into(),
-            metadata: None,
-        })).await
+        self.broadcast(
+            &feedback.chat_id,
+            CliPacket::Message(MessagePacket {
+                chat_id: feedback.chat_id.clone(),
+                content: text,
+                role: "assistant".into(),
+                metadata: None,
+            }),
+        )
+        .await
     }
 
     fn config(&self) -> Option<Arc<dyn ConfigProvider>> {

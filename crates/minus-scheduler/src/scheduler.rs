@@ -26,10 +26,23 @@ pub enum ScheduleKind {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum JobAction {
-    AgentPrompt { prompt: String, agent_id: Option<String> },
-    MessageSend { content: String, generate: bool },
-    UseChat { chat_id: String, content: String },
-    AskAgent { chat_id: String, content: String, agent_id: String },
+    AgentPrompt {
+        prompt: String,
+        agent_id: Option<String>,
+    },
+    MessageSend {
+        content: String,
+        generate: bool,
+    },
+    UseChat {
+        chat_id: String,
+        content: String,
+    },
+    AskAgent {
+        chat_id: String,
+        content: String,
+        agent_id: String,
+    },
 }
 
 /// A triggered job event sent to the runtime.
@@ -323,10 +336,12 @@ impl Scheduler {
                     // Fallback for single action
                     serde_json::from_str::<JobAction>(&job.action_json).map(|a| vec![a])
                 })
-                .unwrap_or_else(|_| vec![JobAction::MessageSend {
-                    content: "Job triggered (invalid action format)".into(),
-                    generate: false,
-                }]);
+                .unwrap_or_else(|_| {
+                    vec![JobAction::MessageSend {
+                        content: "Job triggered (invalid action format)".into(),
+                        generate: false,
+                    }]
+                });
 
             let trigger = JobTrigger {
                 job_id: job.id.clone(),
@@ -462,22 +477,36 @@ pub fn parse_duration_str(s: &str) -> Result<std::time::Duration> {
 impl minus_api::traits::MinusScheduler for Scheduler {
     async fn list_tasks(&self) -> Result<Vec<minus_api::SchedulerTask>> {
         let jobs = self.list_jobs().await?;
-        Ok(jobs.into_iter().map(|j| minus_api::SchedulerTask {
-            id: j.id,
-            name: j.name,
-            schedule: j.schedule_expr,
-            action: j.action_kind,
-            enabled: j.enabled,
-            next_run: j.next_run_at.and_then(|s| DateTime::parse_from_rfc3339(&s).ok()).map(|d| d.with_timezone(&Utc)),
-        }).collect())
+        Ok(jobs
+            .into_iter()
+            .map(|j| minus_api::SchedulerTask {
+                id: j.id,
+                name: j.name,
+                schedule: j.schedule_expr,
+                action: j.action_kind,
+                enabled: j.enabled,
+                next_run: j
+                    .next_run_at
+                    .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
+                    .map(|d| d.with_timezone(&Utc)),
+            })
+            .collect())
     }
 
     async fn delete_task(&self, id: &str) -> Result<bool> {
         self.cancel_job(id).await
     }
 
-    async fn create_task(&self, name: &str, schedule: &str, prompt: &str, target_chat_id: Option<&str>, generate: bool) -> Result<String> {
-        self.create_job(name, schedule, prompt, target_chat_id, generate).await
+    async fn create_task(
+        &self,
+        name: &str,
+        schedule: &str,
+        prompt: &str,
+        target_chat_id: Option<&str>,
+        generate: bool,
+    ) -> Result<String> {
+        self.create_job(name, schedule, prompt, target_chat_id, generate)
+            .await
     }
 }
 

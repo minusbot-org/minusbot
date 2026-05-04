@@ -1,6 +1,6 @@
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use async_trait::async_trait;
-use minus_api::{Tool, ToolCall, ToolContext, ToolDefinition, ToolResult, ToolRisk, ChatId};
+use minus_api::{ChatId, Tool, ToolCall, ToolContext, ToolDefinition, ToolResult, ToolRisk};
 use serde_json::json;
 
 /// Tool: agent_list
@@ -27,7 +27,8 @@ impl Tool for AgentListTool {
         let content = if agents.is_empty() {
             "No utility agents found. You are the only agent available.".into()
         } else {
-            let lines: Vec<String> = agents.iter()
+            let lines: Vec<String> = agents
+                .iter()
                 .map(|a| format!("- {} (ID: {})", a.name, a.id))
                 .collect();
             format!("Available agents:\n{}", lines.join("\n"))
@@ -66,13 +67,22 @@ impl Tool for AgentCallTool {
     }
 
     async fn call(&self, call: ToolCall, ctx: ToolContext) -> Result<ToolResult> {
-        let agent_id = call.arguments["agent_id"].as_str().context("Missing agent_id")?;
-        let content = call.arguments["content"].as_str().context("Missing content")?;
-        let target_chat_id = call.arguments["chat_id"].as_str()
+        let agent_id = call.arguments["agent_id"]
+            .as_str()
+            .context("Missing agent_id")?;
+        let content = call.arguments["content"]
+            .as_str()
+            .context("Missing content")?;
+        let target_chat_id = call.arguments["chat_id"]
+            .as_str()
             .map(|s| ChatId(s.to_string()))
             .unwrap_or(ctx.chat_id.clone());
 
-        let response = ctx.agent.clone().call_agent(agent_id, content, target_chat_id, ctx.channel_id.clone()).await?;
+        let response = ctx
+            .agent
+            .clone()
+            .call_agent(agent_id, content, target_chat_id, ctx.channel_id.clone())
+            .await?;
 
         Ok(ToolResult {
             tool_call_id: call.id,

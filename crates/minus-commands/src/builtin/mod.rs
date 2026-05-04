@@ -1,15 +1,15 @@
-pub mod help;
-pub mod status;
+pub mod apikey;
+pub mod channels;
 pub mod chat;
 pub mod core;
-pub mod providers;
-pub mod models;
-pub mod secrets;
-pub mod apikey;
-pub mod tools;
+pub mod help;
 pub mod memory;
+pub mod models;
+pub mod providers;
 pub mod scheduler;
-pub mod channels;
+pub mod secrets;
+pub mod status;
+pub mod tools;
 
 use crate::registry::CommandRegistry;
 use std::sync::Arc;

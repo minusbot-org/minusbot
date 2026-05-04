@@ -1,15 +1,17 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use minus_api::*;
 use minus_api::ChatId;
-use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
-use teloxide::{Bot, dptree};
-use teloxide::dispatching::{Dispatcher, UpdateFilterExt};
-use teloxide::types::{BotCommand, ChatAction, ChatId as TgChatId, Message as TgMessage, ParseMode, Update};
-use teloxide::requests::Requester;
-use teloxide::payloads::SendMessageSetters;
+use minus_api::*;
 use rand::{distributions::Alphanumeric, Rng};
+use std::sync::Arc;
+use teloxide::dispatching::{Dispatcher, UpdateFilterExt};
+use teloxide::payloads::SendMessageSetters;
+use teloxide::requests::Requester;
+use teloxide::types::{
+    BotCommand, ChatAction, ChatId as TgChatId, Message as TgMessage, ParseMode, Update,
+};
+use teloxide::{dptree, Bot};
+use tokio::sync::{mpsc, RwLock};
 
 #[derive(Clone)]
 pub struct TelegramChannel {
@@ -47,7 +49,10 @@ impl TelegramChannel {
     }
 
     async fn get_token(&self) -> Result<String> {
-        let bytes = self.secrets.get_secret("BOT_TOKEN").await?
+        let bytes = self
+            .secrets
+            .get_secret("BOT_TOKEN")
+            .await?
             .context("Telegram BOT_TOKEN not found in secrets (channel:telegram:BOT_TOKEN)")?;
         Ok(String::from_utf8(bytes)?.trim().to_string())
     }
@@ -55,15 +60,21 @@ impl TelegramChannel {
 
 #[async_trait]
 impl Channel for TelegramChannel {
-    fn id(&self) -> &'static str { "telegram" }
-    fn name(&self) -> &'static str { "Telegram Channel" }
+    fn id(&self) -> &'static str {
+        "telegram"
+    }
+    fn name(&self) -> &'static str {
+        "Telegram Channel"
+    }
 
     fn is_enabled(&self) -> bool {
         self.enabled.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     async fn set_enabled(&self, flag: bool) -> Result<bool> {
-        let old = self.enabled.swap(flag, std::sync::atomic::Ordering::Relaxed);
+        let old = self
+            .enabled
+            .swap(flag, std::sync::atomic::Ordering::Relaxed);
         Ok(old != flag)
     }
 
@@ -116,13 +127,12 @@ impl Channel for TelegramChannel {
                 .to_uppercase();
             format!("{}-{}", part1, part2)
         };
-        
+
         let mut setup = self.setup_pin.write().await;
         *setup = Some(pin.clone());
-        
+
         Ok(pin)
     }
-
 
     async fn start(&self, _ctx: ChannelContext) -> Result<()> {
         let token = match self.get_token().await {
@@ -141,7 +151,8 @@ impl Channel for TelegramChannel {
 
         // Apply pending commands
         if let Some(cmds) = self.pending_commands.write().await.take() {
-            let tg_commands: Vec<BotCommand> = cmds.into_iter()
+            let tg_commands: Vec<BotCommand> = cmds
+                .into_iter()
                 .map(|c| BotCommand {
                     command: c.name,
                     description: c.description,
@@ -244,8 +255,7 @@ impl Channel for TelegramChannel {
                     }),
             );
 
-        let mut dispatcher = Dispatcher::builder(bot, handler)
-            .build();
+        let mut dispatcher = Dispatcher::builder(bot, handler).build();
 
         let token = dispatcher.shutdown_token();
         let mut shutdown = _ctx.shutdown.subscribe();
@@ -268,15 +278,20 @@ impl Channel for TelegramChannel {
     async fn send_message(&self, packet: MessagePacket) -> Result<()> {
         let bot = self.bot.read().await;
         if let Some(bot) = bot.as_ref() {
-            let tg_chat_id: i64 = packet.chat_id.0.parse()
+            let tg_chat_id: i64 = packet
+                .chat_id
+                .0
+                .parse()
                 .context("Invalid Telegram chat ID")?;
-            bot.send_message(TgChatId(tg_chat_id), packet.content).await?;
+            bot.send_message(TgChatId(tg_chat_id), packet.content)
+                .await?;
         }
         Ok(())
     }
 
     async fn send_notification(&self, packet: NotificationPacket) -> Result<()> {
-        self.send_message(MessagePacket::new(packet.chat_id, "system", packet.content)).await
+        self.send_message(MessagePacket::new(packet.chat_id, "system", packet.content))
+            .await
     }
 
     async fn send_tool_call(&self, _packet: ToolCallPacket) -> Result<()> {
@@ -290,19 +305,21 @@ impl Channel for TelegramChannel {
         } else {
             feedback.result
         };
-        self.send_message(MessagePacket::new(feedback.chat_id, "system", text)).await
+        self.send_message(MessagePacket::new(feedback.chat_id, "system", text))
+            .await
     }
 
     async fn register_commands(&self, commands: Vec<CommandDefinition>) -> Result<()> {
         let bot = self.bot.read().await;
         if let Some(bot) = bot.as_ref() {
-            let tg_commands: Vec<BotCommand> = commands.into_iter()
+            let tg_commands: Vec<BotCommand> = commands
+                .into_iter()
                 .map(|c| BotCommand {
                     command: c.name,
                     description: c.description,
                 })
                 .collect();
-            
+
             bot.set_my_commands(tg_commands).await?;
         } else {
             let mut pending = self.pending_commands.write().await;
@@ -312,13 +329,15 @@ impl Channel for TelegramChannel {
     }
 
     async fn set_typing(&self, chat_id: ChatId, flag: bool) -> Result<()> {
-        if !flag { return Ok(()); } // Telegram typing expires automatically
-        
+        if !flag {
+            return Ok(());
+        } // Telegram typing expires automatically
+
         let bot = self.bot.read().await;
         if let Some(bot) = bot.as_ref() {
-            let tg_chat_id: i64 = chat_id.0.parse()
-                .context("Invalid Telegram chat ID")?;
-            bot.send_chat_action(TgChatId(tg_chat_id), ChatAction::Typing).await?;
+            let tg_chat_id: i64 = chat_id.0.parse().context("Invalid Telegram chat ID")?;
+            bot.send_chat_action(TgChatId(tg_chat_id), ChatAction::Typing)
+                .await?;
         }
         Ok(())
     }

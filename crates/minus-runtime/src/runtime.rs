@@ -42,7 +42,7 @@ impl Runtime {
     ) -> Result<String> {
         let parsed = minus_commands::parse_slash_command(&msg.content);
         let registry = runtime.commands.read().await;
-        
+
         if let Some(cmd) = registry.get(&parsed.name) {
             let (shutdown_tx, _) = tokio::sync::mpsc::channel(1);
             let ctx = CommandContext {
@@ -59,7 +59,7 @@ impl Runtime {
                 shutdown_trigger: Some(shutdown_tx),
                 all_commands: registry.list(),
             };
-            
+
             cmd.execute(parsed.args, ctx).await
         } else {
             Ok(format!("Unknown command: /{}", parsed.name))
@@ -72,7 +72,10 @@ impl Runtime {
         channel: Arc<dyn Channel>,
     ) -> Result<String> {
         if minus_commands::is_slash_command(&msg.content) {
-            anyhow::bail!("Slash commands must be processed via process_command: {}", msg.content);
+            anyhow::bail!(
+                "Slash commands must be processed via process_command: {}",
+                msg.content
+            );
         }
 
         runtime.agent.clone().handle_message(msg, channel).await
@@ -140,8 +143,23 @@ impl MinusScheduler for Runtime {
         minus_api::traits::MinusScheduler::delete_task(self.scheduler.as_ref(), id).await
     }
 
-    async fn create_task(&self, name: &str, schedule: &str, prompt: &str, target_chat_id: Option<&str>, generate: bool) -> Result<String> {
-        minus_api::traits::MinusScheduler::create_task(self.scheduler.as_ref(), name, schedule, prompt, target_chat_id, generate).await
+    async fn create_task(
+        &self,
+        name: &str,
+        schedule: &str,
+        prompt: &str,
+        target_chat_id: Option<&str>,
+        generate: bool,
+    ) -> Result<String> {
+        minus_api::traits::MinusScheduler::create_task(
+            self.scheduler.as_ref(),
+            name,
+            schedule,
+            prompt,
+            target_chat_id,
+            generate,
+        )
+        .await
     }
 }
 
@@ -172,7 +190,9 @@ impl MinusChannels for Runtime {
     }
 
     async fn set_channel_enabled(&self, id: &str, enabled: bool) -> Result<bool> {
-        let chan = self.get_channel(id).await
+        let chan = self
+            .get_channel(id)
+            .await
             .ok_or_else(|| anyhow::anyhow!("Channel '{}' not found", id))?;
         chan.set_enabled(enabled).await
     }
@@ -185,7 +205,9 @@ impl MinusChannels for Runtime {
 #[minus_api::async_trait]
 impl MinusSecrets for Runtime {
     async fn get_store(&self, component_id: &str) -> Result<Arc<dyn MinusSecretStore>> {
-        let vault = self.vault.clone()
+        let vault = self
+            .vault
+            .clone()
             .ok_or_else(|| anyhow::anyhow!("Vault not initialized"))?;
         let prefix = if component_id.is_empty() {
             "".to_string()
@@ -214,31 +236,48 @@ impl MinusSecrets for Runtime {
                 ("system".to_string(), "Orphan / Custom", false)
             };
 
-            if let Some(r) = db_record { approved = r.approved; }
+            if let Some(r) = db_record {
+                approved = r.approved;
+            }
 
             declarations.push(SecretDeclaration {
-                id: db_record.map(|r| r.id.clone()).unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
-                component_id: ComponentId(db_record.map(|r| r.component_id.clone()).unwrap_or(comp_id)),
+                id: db_record
+                    .map(|r| r.id.clone())
+                    .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+                component_id: ComponentId(
+                    db_record.map(|r| r.component_id.clone()).unwrap_or(comp_id),
+                ),
                 key: key.clone(),
-                description: db_record.map(|r| r.description.clone()).unwrap_or_else(|| desc.to_string()),
+                description: db_record
+                    .map(|r| r.description.clone())
+                    .unwrap_or_else(|| desc.to_string()),
                 required: db_record.map(|r| r.required).unwrap_or(false),
                 permissions: vec![],
                 approved,
-                created_at: db_record.map(|r| {
-                    chrono::DateTime::parse_from_rfc3339(&r.created_at)
-                        .unwrap_or_default().with_timezone(&chrono::Utc)
-                }).unwrap_or_else(chrono::Utc::now),
+                created_at: db_record
+                    .map(|r| {
+                        chrono::DateTime::parse_from_rfc3339(&r.created_at)
+                            .unwrap_or_default()
+                            .with_timezone(&chrono::Utc)
+                    })
+                    .unwrap_or_else(chrono::Utc::now),
             });
         }
         Ok(declarations)
     }
 
     async fn approve_secret(&self, component_id: &str, key: &str) -> Result<()> {
-        self.db.set_secret_declaration_approval(component_id, key, true).await.map(|_| ())
+        self.db
+            .set_secret_declaration_approval(component_id, key, true)
+            .await
+            .map(|_| ())
     }
 
     async fn deny_secret(&self, component_id: &str, key: &str) -> Result<()> {
-        self.db.set_secret_declaration_approval(component_id, key, false).await.map(|_| ())
+        self.db
+            .set_secret_declaration_approval(component_id, key, false)
+            .await
+            .map(|_| ())
     }
 
     async fn resolve_secret(&self, key: &str) -> Result<Option<String>> {
@@ -266,13 +305,29 @@ impl MinusProviders for Runtime {
         let provider_id = self.get_default_provider_id().await?;
         let key_name = format!("PROVIDER_{}_API_KEY", provider_id.to_uppercase());
         let secret_key = self.resolve_secret_value(&key_name).await?;
-        self.providers.read().await.get_text_models(secret_key).await
+        self.providers
+            .read()
+            .await
+            .get_text_models(secret_key)
+            .await
     }
     async fn get_default_provider_id(&self) -> Result<String> {
-        Ok(self.providers.read().await.default_id().unwrap_or("").to_string())
+        Ok(self
+            .providers
+            .read()
+            .await
+            .default_id()
+            .unwrap_or("")
+            .to_string())
     }
     async fn get_default_text_model(&self) -> Result<String> {
-        Ok(self.providers.read().await.default_model().unwrap_or("").to_string())
+        Ok(self
+            .providers
+            .read()
+            .await
+            .default_model()
+            .unwrap_or("")
+            .to_string())
     }
     async fn set_default_text_model(&self, model: &str) -> Result<()> {
         self.providers.write().await.set_default_model(model);
@@ -303,7 +358,12 @@ impl MinusConfigRegistry for Runtime {
         self.config_providers.read().await.get(id).cloned()
     }
     async fn list_providers(&self) -> Vec<Arc<dyn ConfigProvider>> {
-        self.config_providers.read().await.values().cloned().collect()
+        self.config_providers
+            .read()
+            .await
+            .values()
+            .cloned()
+            .collect()
     }
     async fn register(&self, provider: Arc<dyn ConfigProvider>) {
         let id = provider.id().to_string();

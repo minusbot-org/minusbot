@@ -1,7 +1,7 @@
+use crate::Database;
 use anyhow::Result;
 use chrono::Utc;
 use sqlx::Row;
-use crate::Database;
 
 #[derive(Debug, Clone)]
 pub struct MemoryRecord {

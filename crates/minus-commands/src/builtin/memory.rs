@@ -36,15 +36,23 @@ impl Command for MemoryCommand {
                     } else {
                         m.content.as_deref().unwrap_or("(no content)")
                     };
-                    res.push_str(&format!("- [{}] {}: {}{}\n", m.id, date, display_text, importance));
+                    res.push_str(&format!(
+                        "- [{}] {}: {}{}\n",
+                        m.id, date, display_text, importance
+                    ));
                 }
                 Ok(res)
             }
             "search" => {
-                let term = args.get(1).context("Missing search term: /memory search <term>")?;
+                let term = args
+                    .get(1)
+                    .context("Missing search term: /memory search <term>")?;
                 let results = ctx.db.list_memories().await?; // Basic search for now
-                let filtered: Vec<_> = results.into_iter()
-                    .filter(|m| m.brief.contains(term) || m.content.as_deref().unwrap_or("").contains(term))
+                let filtered: Vec<_> = results
+                    .into_iter()
+                    .filter(|m| {
+                        m.brief.contains(term) || m.content.as_deref().unwrap_or("").contains(term)
+                    })
                     .collect();
 
                 if filtered.is_empty() {
@@ -58,7 +66,9 @@ impl Command for MemoryCommand {
                 Ok(res)
             }
             "delete" => {
-                let id = args.get(1).context("Missing memory ID: /memory delete <id>")?;
+                let id = args
+                    .get(1)
+                    .context("Missing memory ID: /memory delete <id>")?;
                 if ctx.db.delete_memory(id).await? {
                     Ok(format!("Memory '{}' deleted.", id))
                 } else {
@@ -66,16 +76,27 @@ impl Command for MemoryCommand {
                 }
             }
             "create" => {
-                let id = args.get(1).context("Missing ID: /memory create <id> <brief> [content] [important:true|false]")?;
-                let brief = args.get(2).context("Missing brief: /memory create <id> <brief> [content]")?;
+                let id = args.get(1).context(
+                    "Missing ID: /memory create <id> <brief> [content] [important:true|false]",
+                )?;
+                let brief = args
+                    .get(2)
+                    .context("Missing brief: /memory create <id> <brief> [content]")?;
                 let content = args.get(3).map(|s| s.as_str());
                 let important = args.get(4).map(|s| s == "true").unwrap_or(false);
 
-                ctx.db.ensure_chat("system", "cli", "system", Some("System Chat")).await?;
-                ctx.db.save_memory(id, "long", brief, content, important).await?;
+                ctx.db
+                    .ensure_chat("system", "cli", "system", Some("System Chat"))
+                    .await?;
+                ctx.db
+                    .save_memory(id, "long", brief, content, important)
+                    .await?;
                 Ok(format!("Memory '{}' created successfully.", id))
             }
-            _ => bail!("Unknown subcommand: {}. Use list, search, delete, or create.", subcommand),
+            _ => bail!(
+                "Unknown subcommand: {}. Use list, search, delete, or create.",
+                subcommand
+            ),
         }
     }
 }

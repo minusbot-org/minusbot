@@ -13,8 +13,9 @@ pub struct GoogleAiProvider {
 impl GoogleAiProvider {
     pub fn new(api_key: Option<String>, config_path: Option<std::path::PathBuf>) -> Self {
         let id = "provider-google";
-        let config = config_path.map(|p| Arc::new(FileConfigProvider::new(id, p)) as Arc<dyn ConfigProvider>);
-        
+        let config = config_path
+            .map(|p| Arc::new(FileConfigProvider::new(id, p)) as Arc<dyn ConfigProvider>);
+
         Self {
             api_key,
             client: reqwest::Client::builder()
@@ -112,7 +113,9 @@ impl TextProvider for GoogleAiProvider {
                                     name: tc.name.clone(),
                                     args: tc.arguments.clone(),
                                 }),
-                                thought_signature: tc.metadata.as_ref()
+                                thought_signature: tc
+                                    .metadata
+                                    .as_ref()
                                     .and_then(|m| m.get("thought_signature"))
                                     .and_then(|v| v.as_str())
                                     .map(|s| s.to_string()),
@@ -128,7 +131,7 @@ impl TextProvider for GoogleAiProvider {
                 Role::Tool => {
                     // Group consecutive tool responses into a single content
                     let mut parts = Vec::new();
-                    
+
                     // Add the first one
                     parts.push(GeminiPart {
                         text: None,
@@ -136,8 +139,10 @@ impl TextProvider for GoogleAiProvider {
                         function_call: None,
                         function_response: Some(GeminiFunctionResponse {
                             name: msg.name.clone().unwrap_or_default(),
-                            response: serde_json::from_str(&msg.content.clone().unwrap_or_else(|| "{}".to_string()))
-                                .unwrap_or(serde_json::Value::Object(Default::default())),
+                            response: serde_json::from_str(
+                                &msg.content.clone().unwrap_or_else(|| "{}".to_string()),
+                            )
+                            .unwrap_or(serde_json::Value::Object(Default::default())),
                         }),
                     });
 
@@ -151,8 +156,13 @@ impl TextProvider for GoogleAiProvider {
                                 function_call: None,
                                 function_response: Some(GeminiFunctionResponse {
                                     name: next_msg.name.clone().unwrap_or_default(),
-                                    response: serde_json::from_str(&next_msg.content.clone().unwrap_or_else(|| "{}".to_string()))
-                                        .unwrap_or(serde_json::Value::Object(Default::default())),
+                                    response: serde_json::from_str(
+                                        &next_msg
+                                            .content
+                                            .clone()
+                                            .unwrap_or_else(|| "{}".to_string()),
+                                    )
+                                    .unwrap_or(serde_json::Value::Object(Default::default())),
                                 }),
                             });
                         } else {
@@ -172,11 +182,15 @@ impl TextProvider for GoogleAiProvider {
             None
         } else {
             Some(vec![GeminiTool {
-                function_declarations: request.tools.iter().map(|t| GeminiFunctionDeclaration {
-                    name: t.name.clone(),
-                    description: t.description.clone(),
-                    parameters: t.input_schema.clone(),
-                }).collect()
+                function_declarations: request
+                    .tools
+                    .iter()
+                    .map(|t| GeminiFunctionDeclaration {
+                        name: t.name.clone(),
+                        description: t.description.clone(),
+                        parameters: t.input_schema.clone(),
+                    })
+                    .collect(),
             }])
         };
 
@@ -194,10 +208,14 @@ impl TextProvider for GoogleAiProvider {
 
         let api_key = &request.options.api_key;
         if api_key.is_empty() {
-             anyhow::bail!("API key missing for Google AI. Set PROVIDER_GOOGLE_API_KEY.");
+            anyhow::bail!("API key missing for Google AI. Set PROVIDER_GOOGLE_API_KEY.");
         }
 
-        let model = if request.options.model.is_empty() { "gemini-1.5-flash" } else { &request.options.model };
+        let model = if request.options.model.is_empty() {
+            "gemini-1.5-flash"
+        } else {
+            &request.options.model
+        };
         let url = format!(
             "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
             model, api_key
@@ -205,7 +223,12 @@ impl TextProvider for GoogleAiProvider {
 
         tracing::debug!(url = %url, model = %model, "Google AI API request");
 
-        let resp = self.client.post(&url).json(&body).send().await
+        let resp = self
+            .client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
             .context("Failed to send request to Google AI API")?;
 
         let status = resp.status();
@@ -216,11 +239,16 @@ impl TextProvider for GoogleAiProvider {
             anyhow::bail!("Google AI API error ({}): {}", status, raw_text);
         }
 
-        let raw: serde_json::Value = serde_json::from_str(&raw_text).context("Failed to parse Google AI response JSON")?;
-        let api_resp: GeminiResponse = serde_json::from_value(raw.clone()).context("Failed to deserialize Google AI response")?;
-        
-        let candidate = api_resp.candidates.first().context("No candidates in Google AI response")?;
-        
+        let raw: serde_json::Value =
+            serde_json::from_str(&raw_text).context("Failed to parse Google AI response JSON")?;
+        let api_resp: GeminiResponse = serde_json::from_value(raw.clone())
+            .context("Failed to deserialize Google AI response")?;
+
+        let candidate = api_resp
+            .candidates
+            .first()
+            .context("No candidates in Google AI response")?;
+
         let mut content = None;
         let mut tool_calls = Vec::new();
 
@@ -229,9 +257,10 @@ impl TextProvider for GoogleAiProvider {
                 content = Some(text.clone());
             }
             if let Some(fc) = &part.function_call {
-                let metadata = part.thought_signature.as_ref().map(|s| {
-                    serde_json::json!({ "thought_signature": s })
-                });
+                let metadata = part
+                    .thought_signature
+                    .as_ref()
+                    .map(|s| serde_json::json!({ "thought_signature": s }));
                 tool_calls.push(ToolCall {
                     id: uuid::Uuid::new_v4().to_string(),
                     name: fc.name.clone(),
@@ -247,21 +276,33 @@ impl TextProvider for GoogleAiProvider {
             total_tokens: u.total_token_count,
         });
 
-        Ok(ProviderResponse { content, tool_calls, usage, raw: Some(raw) })
+        Ok(ProviderResponse {
+            content,
+            tool_calls,
+            usage,
+            raw: Some(raw),
+        })
     }
 
     async fn get_text_models(&self, secret_key: Option<String>) -> Result<Vec<String>> {
         let configured_key = self.api_key.as_deref().unwrap_or("");
         let api_key = secret_key.as_deref().unwrap_or(configured_key);
-        
+
         if api_key.is_empty() {
-             anyhow::bail!("API key is missing for Google AI. Use '/apikey google <key>'.");
+            anyhow::bail!("API key is missing for Google AI. Use '/apikey google <key>'.");
         }
 
-        let url = format!("https://generativelanguage.googleapis.com/v1beta/models?key={}", api_key);
-        let resp = self.client.get(&url).send().await
+        let url = format!(
+            "https://generativelanguage.googleapis.com/v1beta/models?key={}",
+            api_key
+        );
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
             .context("Failed to connect to Google AI API to list models")?;
-        
+
         let status = resp.status();
         if !status.is_success() {
             let err_text = resp.text().await.unwrap_or_default();
@@ -269,16 +310,20 @@ impl TextProvider for GoogleAiProvider {
         }
 
         let json: serde_json::Value = resp.json().await?;
-        let models: Vec<String> = json["models"].as_array()
-            .map(|arr| arr.iter().filter_map(|m| {
-                let name = m["name"].as_str()?;
-                // Strip the "models/" prefix if present
-                Some(name.strip_prefix("models/").unwrap_or(name).to_string())
+        let models: Vec<String> = json["models"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|m| {
+                        let name = m["name"].as_str()?;
+                        // Strip the "models/" prefix if present
+                        Some(name.strip_prefix("models/").unwrap_or(name).to_string())
+                    })
+                    .filter(|m| m.contains("gemini")) // Filter for Gemini models
+                    .collect()
             })
-            .filter(|m| m.contains("gemini")) // Filter for Gemini models
-            .collect())
             .unwrap_or_default();
-        
+
         Ok(models)
     }
 }
