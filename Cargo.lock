@@ -1852,6 +1852,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "minus-provider-opencode"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "minus-api",
+ "minus-provider-openai",
+ "reqwest 0.11.27",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "minus-provider-openrouter"
 version = "0.1.0"
 dependencies = [
@@ -1901,6 +1915,7 @@ dependencies = [
  "async-trait",
  "minus-api",
  "minus-provider-nvidia",
+ "minus-provider-opencode",
  "minus-provider-openrouter",
  "serde",
  "serde_json",
@@ -2032,6 +2047,7 @@ dependencies = [
  "minus-provider-mistral",
  "minus-provider-nvidia",
  "minus-provider-openai",
+ "minus-provider-opencode",
  "minus-provider-openrouter",
  "minus-provider-together-ai",
  "minus-provider-x-ai",

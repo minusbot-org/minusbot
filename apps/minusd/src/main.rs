@@ -14,6 +14,7 @@ use minus_provider_deepseek::DeepSeekProvider;
 use minus_provider_groq::GroqProvider;
 use minus_provider_openai::OpenAiProvider;
 use minus_provider_openrouter::OpenRouterProvider;
+use minus_provider_opencode::OpenCodeProvider;
 use minus_provider_nvidia::NvidiaProvider;
 use minus_provider_together_ai::TogetherAiProvider;
 use minus_provider_x_ai::XAiProvider;
@@ -248,6 +249,15 @@ async fn main() -> Result<()> {
             mistral_codestral_key,
             mistral_codestral_base,
             Some(mistral_codestral_cfg),
+        )));
+
+        let opencode_key = sec.get("PROVIDER_OPENCODE_API_KEY").map(|s| s.to_string());
+        let opencode_base = sec.get("PROVIDER_OPENCODE_ENDPOINT").map(|s| s.to_string());
+        let opencode_cfg = data_dir.component_config_path("provider", "opencode");
+        provider_reg.register(Arc::new(OpenCodeProvider::new(
+            opencode_key,
+            opencode_base,
+            Some(opencode_cfg),
         )));
     }
 

@@ -7,6 +7,7 @@ edition = "2021"
 minus-api = { path = "../minus-api" }
 minus-provider-openrouter = { path = "../../providers/minus-provider-openrouter" }
 minus-provider-nvidia = { path = "../../providers/minus-provider-nvidia" }
+minus-provider-opencode = { path = "../../providers/minus-provider-opencode" }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
